@@ -23,7 +23,28 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(config_name='development'):
-    """Application factory pattern"""
+    """
+    Create and configure the Flask application using the factory pattern.
+
+    This pattern allows for easy testing and multiple configurations.
+    It's a best practice for Flask applications that may grow in complexity.
+
+    Args:
+        config_name (str): The configuration environment to use.
+                          Options: 'development', 'testing', 'production'
+                          Defaults to 'development'.
+
+    Returns:
+        Flask: A configured Flask application instance with:
+               - CORS enabled for cross-origin requests
+               - Flask-RESTX API with Swagger UI at /swagger
+               - Configured namespaces for different API sections
+               - Sample data loaded (in development mode)
+
+    Example:
+        app = create_app('development')
+        app.run(debug=True)
+    """
     app = Flask(__name__)
 
     # Load configuration
@@ -76,9 +97,29 @@ def create_app(config_name='development'):
 
     @health_ns.route('/')
     class HealthCheck(Resource):
+        """
+        Health check endpoint for monitoring API status.
+
+        This endpoint provides a simple way to check if the API is running
+        and responsive. It's commonly used by load balancers and monitoring
+        tools to determine service health.
+        """
+
         @health_ns.doc('health_check')
         def get(self):
-            """Check if the API is running"""
+            """
+            Perform a basic health check of the API.
+
+            Returns a simple health status indicating the API is running.
+            This is typically used for liveness probes in container orchestration.
+
+            Returns:
+                dict: Health status with timestamp and service information
+                    - status (str): Always 'healthy' if the service responds
+                    - timestamp (str): Current UTC timestamp in ISO format
+                    - service (str): Name of the service
+                    - version (str): API version
+            """
             logger.info("Health check requested")
             return {
                 'status': 'healthy',
@@ -89,9 +130,29 @@ def create_app(config_name='development'):
 
     @health_ns.route('/ready')
     class ReadinessCheck(Resource):
+        """
+        Readiness check endpoint for determining if the API can serve requests.
+
+        Different from health check, this endpoint verifies that all dependencies
+        (database, cache, external services) are available and the service is
+        ready to handle traffic.
+        """
+
         @health_ns.doc('readiness_check')
         def get(self):
-            """Check if the API is ready to serve requests"""
+            """
+            Check if the API is ready to serve requests.
+
+            Verifies that all required services and dependencies are available.
+            In production, this would check database connections, cache availability,
+            and other critical dependencies.
+
+            Returns:
+                dict: Readiness status with individual component health
+                    - status (str): 'ready' if all checks pass
+                    - timestamp (str): Current UTC timestamp
+                    - checks (dict): Status of each component
+            """
             # In production, check database connectivity, etc.
             return {
                 'status': 'ready',
@@ -104,10 +165,32 @@ def create_app(config_name='development'):
 
     @tasks_ns.route('/')
     class TaskList(Resource):
+        """
+        Task collection endpoint for managing multiple tasks.
+
+        Handles operations on the entire task collection including
+        listing all tasks and creating new tasks.
+        """
+
         @tasks_ns.doc('list_tasks')
         @tasks_ns.marshal_list_with(task_model)
         def get(self):
-            """List all tasks"""
+            """
+            Retrieve all tasks in the system.
+
+            Returns a list of all tasks currently stored in memory.
+            In a production system, this would typically include pagination
+            parameters to handle large datasets efficiently.
+
+            Returns:
+                list: Array of task objects, each containing:
+                    - id (int): Unique task identifier
+                    - title (str): Task title
+                    - description (str): Task description
+                    - completed (bool): Completion status
+                    - created_at (datetime): Creation timestamp
+                    - updated_at (datetime): Last modification timestamp
+            """
             logger.info(f"Fetching all tasks. Count: {len(tasks)}")
             return tasks
 
@@ -115,7 +198,20 @@ def create_app(config_name='development'):
         @tasks_ns.expect(task_input, validate=True)
         @tasks_ns.marshal_with(task_model, code=201)
         def post(self):
-            """Create a new task"""
+            """
+            Create a new task.
+
+            Accepts task data in the request body and creates a new task
+            with auto-generated ID and timestamps. The task is stored in
+            the in-memory list (in production, this would persist to a database).
+
+            Returns:
+                tuple: (task_dict, 201) - Created task with 201 status code
+                    The task includes all fields plus generated ID and timestamps
+
+            Raises:
+                400: If validation fails (handled by Flask-RESTX validate=True)
+            """
             task_counter['id'] += 1
             new_task = {
                 'id': task_counter['id'],
@@ -133,10 +229,28 @@ def create_app(config_name='development'):
     @tasks_ns.param('task_id', 'Task identifier')
     @tasks_ns.response(404, 'Task not found')
     class Task(Resource):
+        """
+        Individual task endpoint for single task operations.
+
+        Handles CRUD operations on individual tasks identified by their ID.
+        Supports retrieving, updating, and deleting specific tasks.
+        """
+
         @tasks_ns.doc('get_task')
         @tasks_ns.marshal_with(task_model)
         def get(self, task_id):
-            """Get a task by ID"""
+            """
+            Retrieve a specific task by its ID.
+
+            Args:
+                task_id (int): Unique identifier of the task to retrieve
+
+            Returns:
+                dict: Task object if found
+
+            Raises:
+                404: If task with given ID does not exist
+            """
             task = next((t for t in tasks if t['id'] == task_id), None)
             if task is None:
                 api.abort(404, f"Task {task_id} not found")
@@ -147,7 +261,23 @@ def create_app(config_name='development'):
         @tasks_ns.expect(task_input, validate=True)
         @tasks_ns.marshal_with(task_model)
         def put(self, task_id):
-            """Update a task"""
+            """
+            Update an existing task.
+
+            Performs a partial update on the task. Only provided fields
+            are updated; omitted fields retain their current values.
+            Updates the 'updated_at' timestamp automatically.
+
+            Args:
+                task_id (int): ID of the task to update
+
+            Returns:
+                dict: Updated task object
+
+            Raises:
+                404: If task with given ID does not exist
+                400: If validation fails on input data
+            """
             task = next((t for t in tasks if t['id'] == task_id), None)
             if task is None:
                 api.abort(404, f"Task {task_id} not found")
@@ -163,7 +293,21 @@ def create_app(config_name='development'):
         @tasks_ns.doc('delete_task')
         @tasks_ns.response(204, 'Task deleted')
         def delete(self, task_id):
-            """Delete a task"""
+            """
+            Delete a task permanently.
+
+            Removes the task from the system. This is a permanent operation
+            and cannot be undone. Returns 204 No Content on success.
+
+            Args:
+                task_id (int): ID of the task to delete
+
+            Returns:
+                tuple: ('', 204) - Empty response with 204 status code
+
+            Raises:
+                404: If task with given ID does not exist
+            """
             global tasks
             initial_count = len(tasks)
             tasks = [t for t in tasks if t['id'] != task_id]
@@ -176,12 +320,35 @@ def create_app(config_name='development'):
 
     @tasks_ns.route('/search')
     class TaskSearch(Resource):
+        """
+        Task search endpoint with filtering capabilities.
+
+        Provides search functionality across task titles and descriptions,
+        with optional filtering by completion status.
+        """
+
         @tasks_ns.doc('search_tasks')
         @tasks_ns.param('q', 'Search query', type='string')
         @tasks_ns.param('completed', 'Filter by completion status', type='boolean')
         @tasks_ns.marshal_list_with(task_model)
         def get(self):
-            """Search tasks"""
+            """
+            Search tasks by query string and filter by status.
+
+            Performs case-insensitive search across task titles and descriptions.
+            Optionally filters results by completion status.
+
+            Query Parameters:
+                q (str, optional): Search query to match against title/description
+                completed (bool, optional): Filter by completion status
+
+            Returns:
+                list: Array of tasks matching search criteria
+
+            Example:
+                GET /api/v1/tasks/search?q=important&completed=false
+                Returns all incomplete tasks containing 'important'
+            """
             from flask import request
             query = request.args.get('q', '').lower()
             completed_filter = request.args.get('completed')
@@ -203,9 +370,28 @@ def create_app(config_name='development'):
 
     @tasks_ns.route('/stats')
     class TaskStats(Resource):
+        """
+        Task statistics endpoint for analytics.
+
+        Provides aggregated statistics about tasks in the system,
+        useful for dashboards and reporting.
+        """
+
         @tasks_ns.doc('task_statistics')
         def get(self):
-            """Get task statistics"""
+            """
+            Get aggregated statistics about tasks.
+
+            Calculates and returns various metrics about the tasks,
+            including counts and completion rates.
+
+            Returns:
+                dict: Statistics object containing:
+                    - total (int): Total number of tasks
+                    - completed (int): Number of completed tasks
+                    - pending (int): Number of pending tasks
+                    - completion_rate (float): Percentage of tasks completed
+            """
             total = len(tasks)
             completed = sum(1 for t in tasks if t['completed'])
             pending = total - completed
