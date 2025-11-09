@@ -205,3 +205,44 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ============================================
+# TEACHING MATERIALS - NOT FOR STUDENTS
+# ============================================
+# Live Coding Guides (Instructor's reference)
+**/LIVE_CODING_GUIDE.md
+**/TEACHING_NOTES.md
+**/INSTRUCTOR_GUIDE.md
+**/PRESENTER_NOTES.md
+
+# Temporary instructor files
+*.instructor.md
+*.teaching.md
+*.notes.md
+
+# ============================================
+# LOCAL DEVELOPMENT
+# ============================================
+# IDE configurations
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs directory (created by exercise_2_logging)
+logs/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded files
+uploads/
+media/
+
+# Redis dump
+dump.rdb
