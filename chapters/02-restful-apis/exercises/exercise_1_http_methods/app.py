@@ -1,39 +1,16 @@
 """
 Exercise 1: HTTP Methods Mastery - Library Management API
 
-OBJECTIVE:
-Master all HTTP methods by building a Library Management API with proper status codes.
+SOLUTION - Complete implementation demonstrating all HTTP methods with proper status codes.
 
-WHAT YOU'LL BUILD:
-- Books resource (all CRUD operations)
-- Members resource (all CRUD operations)
-- Borrowing records (create, return, history)
-
-LEARNING GOALS:
+This solution shows:
 - GET for retrieving resources
-- POST for creating resources
-- PUT for full updates (requires all fields)
+- POST for creating resources with 201 Created
+- PUT for full updates (all fields required)
 - PATCH for partial updates (only some fields)
-- DELETE for removing resources
-- Proper status codes for each operation
-
-TODO CHECKLIST:
-[ ] Implement all Books endpoints (GET, POST, PUT, PATCH, DELETE)
-[ ] Implement all Members endpoints (GET, POST, PUT, DELETE)
-[ ] Implement Borrowing endpoints (GET, POST, PATCH for return)
-[ ] PUT requires all fields, PATCH allows partial updates
-[ ] Use proper status codes (200, 201, 204, 400, 404, 409)
-[ ] Cannot borrow unavailable books (409 Conflict)
-[ ] Cannot delete members with unreturned books
-[ ] Test all endpoints in Swagger UI
-
-HINTS:
-- Use in-memory lists for storage: books, members, borrowings
-- Generate IDs using len(list) + 1 or uuid
-- For PUT: require all fields in request, return 400 if any missing
-- For PATCH: accept partial fields, only update provided ones
-- Check book availability before creating borrowing record
-- Check for active borrowings before deleting member
+- DELETE for removing resources with 204 No Content
+- Proper validation and error handling
+- Business logic (can't borrow unavailable books, can't delete members with active loans)
 """
 
 from flask import Flask
@@ -54,18 +31,16 @@ def create_app():
         app,
         version='1.0',
         title='Library Management API',
-        description='Exercise 1: Master HTTP Methods with a Library API',
+        description='Exercise 1 Solution: Master HTTP Methods with a Library API',
         doc='/swagger'
     )
 
     # ============================================================================
-    # DATA MODELS - Define the structure of our resources
+    # DATA MODELS
     # ============================================================================
 
-    # Books namespace
     books_ns = Namespace('books', description='Book operations')
 
-    # Book model for Swagger documentation
     book_model = books_ns.model('Book', {
         'id': fields.Integer(readonly=True, description='Book unique identifier'),
         'isbn': fields.String(required=True, description='ISBN number'),
@@ -76,10 +51,8 @@ def create_app():
         'available': fields.Boolean(description='Availability status')
     })
 
-    # Members namespace
     members_ns = Namespace('members', description='Member operations')
 
-    # Member model for Swagger documentation
     member_model = members_ns.model('Member', {
         'id': fields.Integer(readonly=True, description='Member unique identifier'),
         'name': fields.String(required=True, description='Member name'),
@@ -88,10 +61,8 @@ def create_app():
         'books_borrowed': fields.Integer(description='Number of books currently borrowed')
     })
 
-    # Borrowings namespace
     borrowings_ns = Namespace('borrowings', description='Borrowing operations')
 
-    # Borrowing model for Swagger documentation
     borrowing_model = borrowings_ns.model('Borrowing', {
         'id': fields.Integer(readonly=True, description='Borrowing record ID'),
         'book_id': fields.Integer(required=True, description='ID of borrowed book'),
@@ -105,7 +76,6 @@ def create_app():
     # IN-MEMORY DATA STORAGE
     # ============================================================================
 
-    # Books storage
     books = [
         {
             'id': 1,
@@ -127,7 +97,6 @@ def create_app():
         }
     ]
 
-    # Members storage
     members = [
         {
             'id': 1,
@@ -138,7 +107,6 @@ def create_app():
         }
     ]
 
-    # Borrowing records storage
     borrowings = []
 
     # ============================================================================
@@ -147,41 +115,42 @@ def create_app():
 
     def find_book_by_id(book_id):
         """Find a book by ID."""
-        # TODO: Implement this helper function
-        # HINT: Use list comprehension or a for loop to find book with matching id
-        # HINT: Return the book dict if found, None if not found
-        pass
+        for book in books:
+            if book['id'] == book_id:
+                return book
+        return None
 
     def find_member_by_id(member_id):
         """Find a member by ID."""
-        # TODO: Implement this helper function
-        # HINT: Similar to find_book_by_id but for members list
-        pass
+        for member in members:
+            if member['id'] == member_id:
+                return member
+        return None
 
     def find_borrowing_by_id(borrowing_id):
         """Find a borrowing record by ID."""
-        # TODO: Implement this helper function
-        pass
+        for borrowing in borrowings:
+            if borrowing['id'] == borrowing_id:
+                return borrowing
+        return None
 
     def is_isbn_duplicate(isbn, exclude_id=None):
         """Check if ISBN already exists (excluding a specific book ID)."""
-        # TODO: Implement duplicate ISBN checking
-        # HINT: Loop through books, check if isbn matches
-        # HINT: If exclude_id is provided, skip that book (for updates)
-        # HINT: Return True if duplicate found, False otherwise
-        pass
+        for book in books:
+            if book['isbn'] == isbn and book['id'] != exclude_id:
+                return True
+        return False
 
     def is_email_duplicate(email, exclude_id=None):
         """Check if email already exists (excluding a specific member ID)."""
-        # TODO: Implement duplicate email checking
-        pass
+        for member in members:
+            if member['email'] == email and member['id'] != exclude_id:
+                return True
+        return False
 
     def get_active_borrowings_for_member(member_id):
         """Get all unreturned books for a member."""
-        # TODO: Return list of borrowings where:
-        # HINT: - member_id matches
-        # HINT: - returned_date is None (not returned yet)
-        pass
+        return [b for b in borrowings if b['member_id'] == member_id and b['returned_date'] is None]
 
     # ============================================================================
     # BOOKS ENDPOINTS
@@ -194,39 +163,42 @@ def create_app():
         @books_ns.doc('list_books')
         @books_ns.marshal_list_with(book_model)
         def get(self):
-            """
-            List all books.
-
-            TODO: Implement this endpoint
-            HINT: Return the books list
-            HINT: Status code 200 (automatically returned by default)
-            """
-            # TODO: Implement GET /books
-            pass
+            """List all books."""
+            return books
 
         @books_ns.doc('create_book')
         @books_ns.expect(book_model)
         @books_ns.marshal_with(book_model, code=201)
         def post(self):
-            """
-            Add a new book.
+            """Add a new book."""
+            data = books_ns.payload
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Get the request data using api.payload
-            2. Validate required fields are present
-            3. Check for duplicate ISBN (return 409 if duplicate)
-            4. Generate new ID (use len(books) + 1)
-            5. Set available to True by default
-            6. Add book to books list
-            7. Return the new book with status code 201
+            # Validate required fields
+            required_fields = ['isbn', 'title', 'author', 'publication_year', 'genre']
+            for field in required_fields:
+                if field not in data:
+                    books_ns.abort(400, f"Missing required field: {field}")
 
-            HINT: Use is_isbn_duplicate() helper
-            HINT: Use books_ns.abort(409, "ISBN already exists") for conflicts
-            HINT: Use books_ns.abort(400, "Missing required field: X") for validation
-            """
-            # TODO: Implement POST /books
-            pass
+            # Check for duplicate ISBN
+            if is_isbn_duplicate(data['isbn']):
+                books_ns.abort(409, f"Book with ISBN {data['isbn']} already exists")
+
+            # Generate new ID
+            new_id = max([b['id'] for b in books]) + 1 if books else 1
+
+            # Create new book
+            new_book = {
+                'id': new_id,
+                'isbn': data['isbn'],
+                'title': data['title'],
+                'author': data['author'],
+                'publication_year': data['publication_year'],
+                'genre': data['genre'],
+                'available': data.get('available', True)  # Default to True
+            }
+
+            books.append(new_book)
+            return new_book, 201
 
     @books_ns.route('/<int:id>')
     @books_ns.response(404, 'Book not found')
@@ -237,16 +209,11 @@ def create_app():
         @books_ns.doc('get_book')
         @books_ns.marshal_with(book_model)
         def get(self, id):
-            """
-            Get a book by ID.
-
-            TODO: Implement this endpoint
-            HINT: Use find_book_by_id() helper
-            HINT: If not found, use books_ns.abort(404, 'Book not found')
-            HINT: Return the book dict with status 200
-            """
-            # TODO: Implement GET /books/{id}
-            pass
+            """Get a book by ID."""
+            book = find_book_by_id(id)
+            if not book:
+                books_ns.abort(404, f"Book {id} not found")
+            return book
 
         @books_ns.doc('update_book_full')
         @books_ns.expect(book_model)
@@ -255,25 +222,33 @@ def create_app():
             """
             Update entire book record (all fields required).
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Find the book by ID (abort 404 if not found)
-            2. Get request data
-            3. Validate ALL required fields are present (isbn, title, author, publication_year, genre)
-            4. Check if ISBN changed and is duplicate (abort 409 if duplicate)
-            5. Update ALL fields of the book
-            6. Return updated book with status 200
-
-            KEY DIFFERENCE FROM PATCH:
-            - PUT requires ALL fields
-            - PATCH allows partial updates
-
-            HINT: Required fields: isbn, title, author, publication_year, genre
-            HINT: Keep the same ID
-            HINT: Preserve 'available' status or update if provided
+            PUT requires ALL fields to be provided.
             """
-            # TODO: Implement PUT /books/{id}
-            pass
+            book = find_book_by_id(id)
+            if not book:
+                books_ns.abort(404, f"Book {id} not found")
+
+            data = books_ns.payload
+
+            # Validate ALL required fields are present (PUT requirement)
+            required_fields = ['isbn', 'title', 'author', 'publication_year', 'genre']
+            for field in required_fields:
+                if field not in data:
+                    books_ns.abort(400, f"PUT requires all fields. Missing: {field}")
+
+            # Check for duplicate ISBN (if changed)
+            if data['isbn'] != book['isbn'] and is_isbn_duplicate(data['isbn']):
+                books_ns.abort(409, f"Book with ISBN {data['isbn']} already exists")
+
+            # Update all fields
+            book['isbn'] = data['isbn']
+            book['title'] = data['title']
+            book['author'] = data['author']
+            book['publication_year'] = data['publication_year']
+            book['genre'] = data['genre']
+            book['available'] = data.get('available', book['available'])
+
+            return book
 
         @books_ns.doc('update_book_partial')
         @books_ns.expect(book_model)
@@ -282,41 +257,45 @@ def create_app():
             """
             Partially update book (only provided fields).
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Find the book by ID (abort 404 if not found)
-            2. Get request data
-            3. If 'isbn' is being updated, check for duplicates
-            4. Update ONLY the fields that were provided in the request
-            5. Return updated book with status 200
-
-            KEY DIFFERENCE FROM PUT:
-            - PATCH allows updating only some fields
-            - PUT requires all fields
-
-            HINT: Use book.update(api.payload) to update only provided fields
-            HINT: Or manually update each field if it exists in payload
+            PATCH allows updating only specific fields.
             """
-            # TODO: Implement PATCH /books/{id}
-            pass
+            book = find_book_by_id(id)
+            if not book:
+                books_ns.abort(404, f"Book {id} not found")
+
+            data = books_ns.payload
+
+            # Check for duplicate ISBN if being updated
+            if 'isbn' in data and data['isbn'] != book['isbn']:
+                if is_isbn_duplicate(data['isbn']):
+                    books_ns.abort(409, f"Book with ISBN {data['isbn']} already exists")
+
+            # Update only provided fields
+            if 'isbn' in data:
+                book['isbn'] = data['isbn']
+            if 'title' in data:
+                book['title'] = data['title']
+            if 'author' in data:
+                book['author'] = data['author']
+            if 'publication_year' in data:
+                book['publication_year'] = data['publication_year']
+            if 'genre' in data:
+                book['genre'] = data['genre']
+            if 'available' in data:
+                book['available'] = data['available']
+
+            return book
 
         @books_ns.doc('delete_book')
         @books_ns.response(204, 'Book deleted')
         def delete(self, id):
-            """
-            Delete a book.
+            """Delete a book."""
+            book = find_book_by_id(id)
+            if not book:
+                books_ns.abort(404, f"Book {id} not found")
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Find the book by ID (abort 404 if not found)
-            2. Remove the book from books list
-            3. Return empty response with status code 204
-
-            HINT: Use books.remove(book)
-            HINT: Return ('', 204) for 204 No Content status
-            """
-            # TODO: Implement DELETE /books/{id}
-            pass
+            books.remove(book)
+            return '', 204
 
     # ============================================================================
     # MEMBERS ENDPOINTS
@@ -329,36 +308,40 @@ def create_app():
         @members_ns.doc('list_members')
         @members_ns.marshal_list_with(member_model)
         def get(self):
-            """
-            List all members.
-
-            TODO: Implement this endpoint
-            """
-            # TODO: Implement GET /members
-            pass
+            """List all members."""
+            return members
 
         @members_ns.doc('create_member')
         @members_ns.expect(member_model)
         @members_ns.marshal_with(member_model, code=201)
         def post(self):
-            """
-            Register a new member.
+            """Register a new member."""
+            data = members_ns.payload
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Get request data
-            2. Validate required fields (name, email)
-            3. Check for duplicate email (abort 409 if exists)
-            4. Generate new ID
-            5. Set membership_date to today
-            6. Set books_borrowed to 0
-            7. Add to members list
-            8. Return new member with status 201
+            # Validate required fields
+            if 'name' not in data:
+                members_ns.abort(400, "Missing required field: name")
+            if 'email' not in data:
+                members_ns.abort(400, "Missing required field: email")
 
-            HINT: Use datetime.now().strftime('%Y-%m-%d') for today's date
-            """
-            # TODO: Implement POST /members
-            pass
+            # Check for duplicate email
+            if is_email_duplicate(data['email']):
+                members_ns.abort(409, f"Member with email {data['email']} already exists")
+
+            # Generate new ID
+            new_id = max([m['id'] for m in members]) + 1 if members else 1
+
+            # Create new member
+            new_member = {
+                'id': new_id,
+                'name': data['name'],
+                'email': data['email'],
+                'membership_date': datetime.now().strftime('%Y-%m-%d'),
+                'books_borrowed': 0
+            }
+
+            members.append(new_member)
+            return new_member, 201
 
     @members_ns.route('/<int:id>')
     @members_ns.response(404, 'Member not found')
@@ -369,48 +352,55 @@ def create_app():
         @members_ns.doc('get_member')
         @members_ns.marshal_with(member_model)
         def get(self, id):
-            """
-            Get a member by ID.
-
-            TODO: Implement this endpoint
-            """
-            # TODO: Implement GET /members/{id}
-            pass
+            """Get a member by ID."""
+            member = find_member_by_id(id)
+            if not member:
+                members_ns.abort(404, f"Member {id} not found")
+            return member
 
         @members_ns.doc('update_member')
         @members_ns.expect(member_model)
         @members_ns.marshal_with(member_model)
         def put(self, id):
-            """
-            Update member information.
+            """Update member information."""
+            member = find_member_by_id(id)
+            if not member:
+                members_ns.abort(404, f"Member {id} not found")
 
-            TODO: Implement this endpoint
-            HINT: Similar to PUT /books/{id}
-            HINT: Require name and email
-            HINT: Check for duplicate email if changed
-            """
-            # TODO: Implement PUT /members/{id}
-            pass
+            data = members_ns.payload
+
+            # Validate required fields for PUT
+            if 'name' not in data:
+                members_ns.abort(400, "PUT requires all fields. Missing: name")
+            if 'email' not in data:
+                members_ns.abort(400, "PUT requires all fields. Missing: email")
+
+            # Check for duplicate email (if changed)
+            if data['email'] != member['email'] and is_email_duplicate(data['email']):
+                members_ns.abort(409, f"Member with email {data['email']} already exists")
+
+            # Update fields
+            member['name'] = data['name']
+            member['email'] = data['email']
+
+            return member
 
         @members_ns.doc('delete_member')
         @members_ns.response(204, 'Member deleted')
         @members_ns.response(409, 'Cannot delete member with unreturned books')
         def delete(self, id):
-            """
-            Delete a member (only if no unreturned books).
+            """Delete a member (only if no unreturned books)."""
+            member = find_member_by_id(id)
+            if not member:
+                members_ns.abort(404, f"Member {id} not found")
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Find member (abort 404 if not found)
-            2. Check for active borrowings using get_active_borrowings_for_member()
-            3. If active borrowings exist, abort 409 with message
-            4. Remove member from list
-            5. Return 204 No Content
+            # Check for active borrowings
+            active_borrowings = get_active_borrowings_for_member(id)
+            if active_borrowings:
+                members_ns.abort(409, f"Cannot delete member with {len(active_borrowings)} unreturned book(s)")
 
-            BUSINESS RULE: Cannot delete members who have unreturned books
-            """
-            # TODO: Implement DELETE /members/{id}
-            pass
+            members.remove(member)
+            return '', 204
 
     # ============================================================================
     # BORROWING ENDPOINTS
@@ -423,13 +413,8 @@ def create_app():
         @borrowings_ns.doc('list_borrowings')
         @borrowings_ns.marshal_list_with(borrowing_model)
         def get(self):
-            """
-            List all borrowing records.
-
-            TODO: Implement this endpoint
-            """
-            # TODO: Implement GET /borrowings
-            pass
+            """List all borrowing records."""
+            return borrowings
 
         @borrowings_ns.doc('create_borrowing')
         @borrowings_ns.expect(borrowing_model)
@@ -437,32 +422,53 @@ def create_app():
         @borrowings_ns.response(409, 'Book not available')
         @borrowings_ns.response(404, 'Book or member not found')
         def post(self):
-            """
-            Borrow a book.
+            """Borrow a book."""
+            data = borrowings_ns.payload
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Get request data (needs book_id and member_id)
-            2. Validate book exists (abort 404 if not)
-            3. Validate member exists (abort 404 if not)
-            4. Check if book is available (abort 409 if not available)
-            5. Generate new borrowing ID
-            6. Set borrowed_date to today
-            7. Set due_date to 14 days from today
-            8. Set returned_date to None
-            9. Mark book as unavailable (available = False)
-            10. Increment member's books_borrowed count
-            11. Add borrowing to borrowings list
-            12. Return borrowing with status 201
+            # Validate required fields
+            if 'book_id' not in data:
+                borrowings_ns.abort(400, "Missing required field: book_id")
+            if 'member_id' not in data:
+                borrowings_ns.abort(400, "Missing required field: member_id")
 
-            BUSINESS RULE: Cannot borrow unavailable books
+            # Validate book exists
+            book = find_book_by_id(data['book_id'])
+            if not book:
+                borrowings_ns.abort(404, f"Book {data['book_id']} not found")
 
-            HINT: Use datetime.now()
-            HINT: Use (datetime.now() + timedelta(days=14)) for due date
-            HINT: Format dates with .strftime('%Y-%m-%d')
-            """
-            # TODO: Implement POST /borrowings
-            pass
+            # Validate member exists
+            member = find_member_by_id(data['member_id'])
+            if not member:
+                borrowings_ns.abort(404, f"Member {data['member_id']} not found")
+
+            # Check if book is available
+            if not book['available']:
+                borrowings_ns.abort(409, f"Book '{book['title']}' is not available")
+
+            # Generate new ID
+            new_id = max([b['id'] for b in borrowings]) + 1 if borrowings else 1
+
+            # Create borrowing record
+            now = datetime.now()
+            due_date = now + timedelta(days=14)
+
+            new_borrowing = {
+                'id': new_id,
+                'book_id': data['book_id'],
+                'member_id': data['member_id'],
+                'borrowed_date': now.strftime('%Y-%m-%d'),
+                'due_date': due_date.strftime('%Y-%m-%d'),
+                'returned_date': None
+            }
+
+            # Update book availability
+            book['available'] = False
+
+            # Update member's borrowed count
+            member['books_borrowed'] += 1
+
+            borrowings.append(new_borrowing)
+            return new_borrowing, 201
 
     @borrowings_ns.route('/<int:id>')
     @borrowings_ns.response(404, 'Borrowing record not found')
@@ -473,13 +479,11 @@ def create_app():
         @borrowings_ns.doc('get_borrowing')
         @borrowings_ns.marshal_with(borrowing_model)
         def get(self, id):
-            """
-            Get a borrowing record by ID.
-
-            TODO: Implement this endpoint
-            """
-            # TODO: Implement GET /borrowings/{id}
-            pass
+            """Get a borrowing record by ID."""
+            borrowing = find_borrowing_by_id(id)
+            if not borrowing:
+                borrowings_ns.abort(404, f"Borrowing record {id} not found")
+            return borrowing
 
     @borrowings_ns.route('/<int:id>/return')
     @borrowings_ns.response(404, 'Borrowing record not found')
@@ -491,24 +495,29 @@ def create_app():
         @borrowings_ns.doc('return_book')
         @borrowings_ns.marshal_with(borrowing_model)
         def patch(self, id):
-            """
-            Return a borrowed book.
+            """Return a borrowed book."""
+            borrowing = find_borrowing_by_id(id)
+            if not borrowing:
+                borrowings_ns.abort(404, f"Borrowing record {id} not found")
 
-            TODO: Implement this endpoint
-            STEPS:
-            1. Find borrowing record (abort 404 if not found)
-            2. Check if already returned (abort 400 if returned_date is not None)
-            3. Set returned_date to today
-            4. Find the book and mark as available (available = True)
-            5. Find the member and decrement books_borrowed count
-            6. Return updated borrowing with status 200
+            # Check if already returned
+            if borrowing['returned_date'] is not None:
+                borrowings_ns.abort(400, "Book has already been returned")
 
-            WHY PATCH?: We're partially updating the borrowing record (just the returned_date)
+            # Update returned date
+            borrowing['returned_date'] = datetime.now().strftime('%Y-%m-%d')
 
-            HINT: Check if borrowing['returned_date'] is not None
-            """
-            # TODO: Implement PATCH /borrowings/{id}/return
-            pass
+            # Mark book as available
+            book = find_book_by_id(borrowing['book_id'])
+            if book:
+                book['available'] = True
+
+            # Decrement member's borrowed count
+            member = find_member_by_id(borrowing['member_id'])
+            if member:
+                member['books_borrowed'] -= 1
+
+            return borrowing
 
     # ============================================================================
     # REGISTER NAMESPACES
@@ -524,17 +533,18 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     print("\n" + "="*70)
-    print("LIBRARY MANAGEMENT API - Exercise 1: HTTP Methods Mastery")
+    print("LIBRARY MANAGEMENT API - Exercise 1 SOLUTION")
     print("="*70)
-    print("📚 Learning Objectives:")
-    print("  - Master all HTTP methods (GET, POST, PUT, PATCH, DELETE)")
-    print("  - Understand proper status codes")
-    print("  - Implement business logic validation")
-    print("\n🎯 Your Tasks:")
-    print("  1. Implement all TODO sections")
-    print("  2. Test each endpoint in Swagger UI")
-    print("  3. Verify proper status codes")
-    print("  4. Test error cases (404, 409, 400)")
+    print("✅ All HTTP methods implemented:")
+    print("  - GET for retrieving resources")
+    print("  - POST for creating (201 Created)")
+    print("  - PUT for full updates (all fields required)")
+    print("  - PATCH for partial updates (some fields)")
+    print("  - DELETE for removing (204 No Content)")
+    print("\n✅ Business logic implemented:")
+    print("  - Cannot borrow unavailable books (409 Conflict)")
+    print("  - Cannot delete members with unreturned books")
+    print("  - Duplicate ISBN/email prevention (409)")
     print("\n🌐 Swagger UI: http://localhost:5000/swagger")
     print("="*70 + "\n")
 

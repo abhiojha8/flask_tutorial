@@ -1,5 +1,5 @@
 """
-Exercise 3: Query Parameters & Filtering - Advanced Product Search API
+Exercise 3: Query Parameters & Filtering - Advanced Product Search API - SOLUTION
 
 OBJECTIVE:
 Master query parameters for filtering, sorting, searching, and pagination.
@@ -170,69 +170,83 @@ def create_app():
         """
         Apply filters to products based on query parameters.
 
-        TODO: Implement filtering logic
-        FILTERS TO SUPPORT:
-        - category: exact match
-        - brand: exact match
-        - min_price: price >= min_price
-        - max_price: price <= max_price
-        - in_stock: stock > 0 (if in_stock=true)
-        - rating_gte: rating >= value
-        - featured: exact match (convert to boolean)
-
         Args:
             products_list: List of products to filter
             params: Query parameters dict
 
         Returns:
             Filtered list of products
-
-        HINT: Start with filtered = products_list.copy()
-        HINT: For each filter, if it exists in params:
-              filtered = [p for p in filtered if condition]
-        HINT: For in_stock, check if params.get('in_stock') == 'true'
-        HINT: For featured, check if params.get('featured') == 'true'
         """
-        # TODO: Implement filtering
-        # Example structure:
-        # filtered = products_list.copy()
-        # if 'category' in params:
-        #     filtered = [p for p in filtered if p['category'] == params['category']]
-        # if 'min_price' in params:
-        #     min_price = float(params['min_price'])
-        #     filtered = [p for p in filtered if p['price'] >= min_price]
-        # ... more filters
-        # return filtered
-        pass
+        filtered = products_list.copy()
+
+        # Category filter - exact match
+        if 'category' in params:
+            filtered = [p for p in filtered if p['category'] == params['category']]
+
+        # Brand filter - exact match
+        if 'brand' in params:
+            filtered = [p for p in filtered if p['brand'] == params['brand']]
+
+        # Minimum price filter
+        if 'min_price' in params:
+            min_price = float(params['min_price'])
+            filtered = [p for p in filtered if p['price'] >= min_price]
+
+        # Maximum price filter
+        if 'max_price' in params:
+            max_price = float(params['max_price'])
+            filtered = [p for p in filtered if p['price'] <= max_price]
+
+        # In stock filter
+        if 'in_stock' in params and params['in_stock'] == 'true':
+            filtered = [p for p in filtered if p['stock'] > 0]
+
+        # Rating greater than or equal filter
+        if 'rating_gte' in params:
+            rating = float(params['rating_gte'])
+            filtered = [p for p in filtered if p['rating'] >= rating]
+
+        # Featured filter
+        if 'featured' in params:
+            featured = params['featured'] == 'true'
+            filtered = [p for p in filtered if p['featured'] == featured]
+
+        return filtered
 
     def apply_search(products_list, params):
         """
         Apply search to products.
 
-        TODO: Implement search logic
         SEARCH PARAMETERS:
         - search: search in name AND description (case-insensitive)
         - name_contains: search only in name (case-insensitive)
         - tags_contains: search in tags list (case-insensitive)
-
-        HINT: Use .lower() for case-insensitive search
-        HINT: Use 'keyword' in text.lower() for substring search
-        HINT: For tags, check if any tag contains the keyword
         """
-        # TODO: Implement search
-        # if 'search' in params:
-        #     keyword = params['search'].lower()
-        #     products_list = [p for p in products_list
-        #                      if keyword in p['name'].lower()
-        #                      or keyword in p['description'].lower()]
-        # ... more search options
-        pass
+        # General search in name and description
+        if 'search' in params:
+            keyword = params['search'].lower()
+            products_list = [p for p in products_list
+                           if keyword in p['name'].lower()
+                           or keyword in p['description'].lower()]
+
+        # Search only in name
+        if 'name_contains' in params:
+            keyword = params['name_contains'].lower()
+            products_list = [p for p in products_list
+                           if keyword in p['name'].lower()]
+
+        # Search in tags
+        if 'tags_contains' in params:
+            keyword = params['tags_contains'].lower()
+            products_list = [p for p in products_list
+                           if any(keyword in tag.lower() for tag in p['tags'])]
+
+        return products_list
 
     def apply_sorting(products_list, params):
         """
         Apply sorting to products.
 
-        TODO: Implement sorting logic
         SORTING PARAMETER:
         - sort: comma-separated fields (e.g., "price,-rating")
         - Fields with '-' prefix are sorted descending
@@ -242,84 +256,104 @@ def create_app():
         ?sort=price          → Sort by price ascending
         ?sort=-price         → Sort by price descending
         ?sort=rating,-price  → Sort by rating asc, then price desc
-
-        HINT: Split params['sort'] by comma
-        HINT: For each field, check if it starts with '-'
-        HINT: Use sorted() with multiple keys
-        HINT: For multiple fields, sort in reverse order:
-              First sort by last field, then by second-to-last, etc.
-
-        ADVANCED HINT:
-        sort_fields = params.get('sort', '').split(',')
-        for field in reversed(sort_fields):  # Process in reverse
-            if field.startswith('-'):
-                actual_field = field[1:]
-                products_list = sorted(products_list, key=lambda x: x[actual_field], reverse=True)
-            else:
-                products_list = sorted(products_list, key=lambda x: x[field])
         """
-        # TODO: Implement sorting
-        pass
+        if 'sort' not in params or not params['sort']:
+            return products_list
+
+        sort_fields = params['sort'].split(',')
+
+        # Process in reverse order for proper multi-field sorting
+        for field in reversed(sort_fields):
+            field = field.strip()
+            if not field:
+                continue
+
+            if field.startswith('-'):
+                # Descending sort
+                actual_field = field[1:]
+                products_list = sorted(products_list, key=lambda x: x.get(actual_field, 0), reverse=True)
+            else:
+                # Ascending sort
+                products_list = sorted(products_list, key=lambda x: x.get(field, 0))
+
+        return products_list
 
     def apply_pagination(products_list, params):
         """
         Apply pagination to products.
 
-        TODO: Implement pagination logic
         PARAMETERS:
         - page: page number (default 1)
         - per_page: items per page (default 10, max 100)
 
         Returns:
             Tuple of (paginated_products, pagination_metadata)
+        """
+        import math
 
-        HINT: page = int(params.get('page', 1))
-        HINT: per_page = min(int(params.get('per_page', 10)), 100)
-        HINT: start_idx = (page - 1) * per_page
-        HINT: end_idx = start_idx + per_page
-        HINT: paginated = products_list[start_idx:end_idx]
+        # Get pagination parameters
+        page = int(params.get('page', 1))
+        per_page = min(int(params.get('per_page', 10)), 100)
 
-        HINT: Build metadata dict:
-        {
-            'page': current page,
-            'per_page': items per page,
-            'total': total items,
-            'pages': total pages (use math.ceil),
-            'has_next': page < total_pages,
+        # Calculate indices
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+
+        # Paginate
+        paginated = products_list[start_idx:end_idx]
+
+        # Calculate total pages
+        total = len(products_list)
+        pages = math.ceil(total / per_page) if per_page > 0 else 0
+
+        # Build metadata
+        metadata = {
+            'page': page,
+            'per_page': per_page,
+            'total': total,
+            'pages': pages,
+            'has_next': page < pages,
             'has_prev': page > 1
         }
-        """
-        # TODO: Implement pagination
-        # Return (paginated_list, metadata_dict)
-        pass
+
+        return paginated, metadata
 
     def apply_field_selection(products_list, params):
         """
         Select specific fields from products.
 
-        TODO: Implement field selection
         PARAMETERS:
         - fields: comma-separated field names (e.g., "id,name,price")
-
-        HINT: If 'fields' not in params, return products_list unchanged
-        HINT: Split params['fields'] by comma to get field list
-        HINT: For each product, create new dict with only selected fields
-        HINT: Use dict comprehension: {k: product[k] for k in field_list if k in product}
         """
-        # TODO: Implement field selection
-        pass
+        if 'fields' not in params or not params['fields']:
+            return products_list
+
+        # Get list of fields to select
+        field_list = [f.strip() for f in params['fields'].split(',')]
+
+        # Create new list with only selected fields
+        selected = []
+        for product in products_list:
+            selected_product = {k: product[k] for k in field_list if k in product}
+            selected.append(selected_product)
+
+        return selected
 
     def get_applied_filters(params):
         """
         Get a dict of filters that were actually applied.
-
-        TODO: Return dict of all filter parameters that were used
-        HINT: Check for: category, brand, min_price, max_price, in_stock,
-              rating_gte, featured, search, name_contains, tags_contains, sort
-        HINT: Only include params that exist and are not empty
         """
-        # TODO: Return dict of applied filters
-        pass
+        filter_params = [
+            'category', 'brand', 'min_price', 'max_price', 'in_stock',
+            'rating_gte', 'featured', 'search', 'name_contains', 'tags_contains', 'sort'
+        ]
+
+        applied = {}
+        for param in filter_params:
+            if param in params and params[param]:
+                applied[param] = params[param]
+
+        return applied
 
     # ============================================================================
     # PRODUCTS ENDPOINT
@@ -349,41 +383,36 @@ def create_app():
             """
             Search and filter products with pagination.
 
-            TODO: Implement the complete query pipeline
-            STEPS:
-            1. Start with all products
-            2. Apply filters using apply_filters()
-            3. Apply search using apply_search()
-            4. Apply sorting using apply_sorting()
-            5. Apply pagination using apply_pagination() - get (data, metadata)
-            6. Apply field selection using apply_field_selection()
-            7. Build response with data, pagination, and filters_applied
-            8. Return response
-
             IMPORTANT:
             - Empty results should return [] with 200, NOT 404
             - Invalid query params (e.g., invalid field name) should return 400
-
-            HINT: Use request.args to get query parameters
-            HINT: response = {
-                'data': selected_products,
-                'pagination': metadata,
-                'filters_applied': get_applied_filters(request.args)
-            }
             """
-            # TODO: Implement GET /products with full query support
-            # params = request.args
-            # filtered = apply_filters(products, params)
-            # searched = apply_search(filtered, params)
-            # sorted_products = apply_sorting(searched, params)
-            # paginated, pagination_meta = apply_pagination(sorted_products, params)
-            # result = apply_field_selection(paginated, params)
-            # return {
-            #     'data': result,
-            #     'pagination': pagination_meta,
-            #     'filters_applied': get_applied_filters(params)
-            # }
-            pass
+            # Get query parameters
+            params = request.args
+
+            # Apply filters
+            filtered = apply_filters(products, params)
+
+            # Apply search
+            searched = apply_search(filtered, params)
+
+            # Apply sorting
+            sorted_products = apply_sorting(searched, params)
+
+            # Apply pagination
+            paginated, pagination_meta = apply_pagination(sorted_products, params)
+
+            # Apply field selection
+            result = apply_field_selection(paginated, params)
+
+            # Build response
+            response = {
+                'data': result,
+                'pagination': pagination_meta,
+                'filters_applied': get_applied_filters(params)
+            }
+
+            return response
 
     @products_ns.route('/<int:id>')
     @products_ns.param('id', 'Product identifier')
@@ -395,12 +424,12 @@ def create_app():
         def get(self, id):
             """
             Get a single product by ID.
-
-            TODO: Implement this endpoint
-            HINT: Find product, return 404 if not found
             """
-            # TODO: Implement GET /products/{id}
-            pass
+            for product in products:
+                if product['id'] == id:
+                    return product
+
+            return {'error': 'Product not found'}, 404
 
     # ============================================================================
     # REGISTER NAMESPACE

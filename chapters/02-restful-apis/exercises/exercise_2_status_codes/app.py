@@ -1,5 +1,5 @@
 """
-Exercise 2: Status Codes & Error Handling - E-commerce Product Catalog API
+Exercise 2: Status Codes & Error Handling - E-commerce Product Catalog API - SOLUTION
 
 OBJECTIVE:
 Implement proper HTTP status codes and meaningful error messages for different scenarios.
@@ -140,20 +140,16 @@ def create_app():
         Returns:
             Tuple of (error_dict, status_code)
         """
-        # TODO: Implement this helper function
-        # HINT: Return a dictionary with structure:
-        # {
-        #     'error': {
-        #         'code': code,
-        #         'message': message,
-        #         'details': details,
-        #         'timestamp': current ISO timestamp,
-        #         'path': request.path (use from flask import request)
-        #     }
-        # }
-        # HINT: Return tuple (error_dict, status_code)
-        # HINT: Use datetime.utcnow().isoformat() + 'Z' for timestamp
-        pass
+        error_dict = {
+            'error': {
+                'code': code,
+                'message': message,
+                'details': details,
+                'timestamp': datetime.utcnow().isoformat() + 'Z',
+                'path': request.path
+            }
+        }
+        return error_dict, status_code
 
     # ============================================================================
     # VALIDATION HELPERS
@@ -162,14 +158,9 @@ def create_app():
     def validate_email(email):
         """
         Validate email format.
-
-        TODO: Implement email validation
-        HINT: Use regex pattern: r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        HINT: Return True if valid, False otherwise
-        HINT: Use re.match(pattern, email)
         """
-        # TODO: Implement email validation
-        pass
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return bool(re.match(pattern, email))
 
     def validate_product_data(data, is_update=False, existing_product=None):
         """
@@ -182,62 +173,67 @@ def create_app():
 
         Returns:
             Dictionary of field errors, or None if valid
-
-        TODO: Implement comprehensive product validation
-        VALIDATION RULES:
-        - name: 3-200 characters (422 if invalid)
-        - sku: required, unique (409 if duplicate)
-        - price: must be > 0 (422 if invalid)
-        - stock_quantity: must be >= 0 (422 if invalid)
-        - category: must be in VALID_CATEGORIES (422 if invalid)
-
-        HINT: Build errors dict like: {'field_name': 'error message'}
-        HINT: For SKU uniqueness, check if any product has same SKU (excluding current product if updating)
-        HINT: Return None if no errors, return errors dict if validation fails
         """
         errors = {}
 
-        # TODO: Validate name length
-        # if 'name' in data:
-        #     if len(data['name']) < 3 or len(data['name']) > 200:
-        #         errors['name'] = 'Name must be between 3 and 200 characters'
+        # Validate name length
+        if 'name' in data:
+            if len(data['name']) < 3 or len(data['name']) > 200:
+                errors['name'] = 'Name must be between 3 and 200 characters'
 
-        # TODO: Validate SKU uniqueness
-        # TODO: Validate price > 0
-        # TODO: Validate stock_quantity >= 0
-        # TODO: Validate category is in VALID_CATEGORIES
+        # Validate SKU uniqueness
+        if 'sku' in data:
+            for product in products:
+                # Skip current product when updating
+                if is_update and existing_product and product['id'] == existing_product['id']:
+                    continue
+                if product['sku'] == data['sku']:
+                    errors['sku'] = 'SKU already exists'
+                    break
+
+        # Validate price > 0
+        if 'price' in data:
+            if data['price'] <= 0:
+                errors['price'] = 'Price must be greater than 0'
+
+        # Validate stock_quantity >= 0
+        if 'stock_quantity' in data:
+            if data['stock_quantity'] < 0:
+                errors['stock_quantity'] = 'Stock quantity must be greater than or equal to 0'
+
+        # Validate category is in VALID_CATEGORIES
+        if 'category' in data:
+            if data['category'] not in VALID_CATEGORIES:
+                errors['category'] = f'Category must be one of: {", ".join(VALID_CATEGORIES)}'
 
         # Return None if valid, errors dict if invalid
         return errors if errors else None
 
     def find_product_by_id(product_id):
         """Find product by ID."""
-        # TODO: Implement this helper
-        pass
+        for product in products:
+            if product['id'] == product_id:
+                return product
+        return None
 
     def find_product_by_sku(sku):
         """Find product by SKU."""
-        # TODO: Implement this helper
-        pass
+        for product in products:
+            if product['sku'] == sku:
+                return product
+        return None
 
     def calculate_order_total(items):
         """
         Calculate total amount for order items.
-
-        TODO: Implement order total calculation
-        STEPS:
-        1. Initialize total = 0
-        2. For each item in items:
-        3.   Find product by product_id
-        4.   If product not found, raise ValueError with product_id
-        5.   Add (product['price'] * item['quantity']) to total
-        6. Return total rounded to 2 decimals
-
-        HINT: Use round(total, 2)
-        HINT: Raise ValueError("Product not found: {id}") if product missing
         """
-        # TODO: Implement total calculation
-        pass
+        total = 0
+        for item in items:
+            product = find_product_by_id(item['product_id'])
+            if not product:
+                raise ValueError(f"Product not found: {item['product_id']}")
+            total += product['price'] * item['quantity']
+        return round(total, 2)
 
     def check_stock_availability(items):
         """
@@ -245,13 +241,17 @@ def create_app():
 
         Returns:
             List of items with insufficient stock, or empty list if all OK
-
-        TODO: Implement stock checking
-        HINT: For each item, find product and check if stock_quantity >= item quantity
-        HINT: Return list of dicts like: [{'product_id': 1, 'requested': 5, 'available': 3}]
         """
-        # TODO: Implement stock checking
-        pass
+        unavailable = []
+        for item in items:
+            product = find_product_by_id(item['product_id'])
+            if product and product['stock_quantity'] < item['quantity']:
+                unavailable.append({
+                    'product_id': item['product_id'],
+                    'requested': item['quantity'],
+                    'available': product['stock_quantity']
+                })
+        return unavailable
 
     # ============================================================================
     # PRODUCTS ENDPOINTS
@@ -267,11 +267,9 @@ def create_app():
             """
             List all products.
 
-            TODO: Implement this endpoint
             STATUS CODE: 200 OK (default)
             """
-            # TODO: Return products list
-            pass
+            return products
 
         @products_ns.doc('create_product')
         @products_ns.expect(product_model)
@@ -283,29 +281,58 @@ def create_app():
             """
             Create a new product.
 
-            TODO: Implement with proper error handling
-            STEPS:
-            1. Get request data
-            2. Check required fields (sku, name, price, stock_quantity, category)
-               - If missing, return 400 with create_error_response()
-            3. Validate data using validate_product_data()
-               - If errors, return 422 with error details
-            4. Check SKU uniqueness
-               - If duplicate, return 409 Conflict
-            5. Generate new ID
-            6. Add product to list
-            7. Return product with 201 Created
-
             ERROR SCENARIOS:
             - Missing required field → 400 Bad Request
             - Invalid field values → 422 Unprocessable Entity
             - Duplicate SKU → 409 Conflict
-
-            HINT: Use create_error_response('VALIDATION_ERROR', message, details, 422)
-            HINT: Use create_error_response('CONFLICT', message, None, 409)
             """
-            # TODO: Implement POST /products with proper error handling
-            pass
+            data = request.json
+
+            # Check required fields
+            required_fields = ['sku', 'name', 'price', 'stock_quantity', 'category']
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                return create_error_response(
+                    'BAD_REQUEST',
+                    'Missing required fields',
+                    {'missing_fields': missing_fields},
+                    400
+                )
+
+            # Validate data
+            validation_errors = validate_product_data(data)
+            if validation_errors:
+                # Check if SKU error (409) vs other validation errors (422)
+                if 'sku' in validation_errors and validation_errors['sku'] == 'SKU already exists':
+                    return create_error_response(
+                        'CONFLICT',
+                        'SKU already exists',
+                        {'sku': data['sku']},
+                        409
+                    )
+                return create_error_response(
+                    'VALIDATION_ERROR',
+                    'Validation failed',
+                    validation_errors,
+                    422
+                )
+
+            # Generate new ID
+            new_id = max([p['id'] for p in products], default=0) + 1
+
+            # Create product
+            product = {
+                'id': new_id,
+                'sku': data['sku'],
+                'name': data['name'],
+                'description': data.get('description', ''),
+                'price': data['price'],
+                'stock_quantity': data['stock_quantity'],
+                'category': data['category']
+            }
+
+            products.append(product)
+            return product, 201
 
     @products_ns.route('/<int:id>')
     @products_ns.response(404, 'Product not found')
@@ -319,17 +346,18 @@ def create_app():
             """
             Get product by ID.
 
-            TODO: Implement with proper 404 handling
-            STEPS:
-            1. Find product by ID
-            2. If not found, return create_error_response('NOT_FOUND', message, None, 404)
-            3. Return product with 200 OK
-
             ERROR SCENARIO:
             - Product doesn't exist → 404 Not Found
             """
-            # TODO: Implement GET /products/{id}
-            pass
+            product = find_product_by_id(id)
+            if not product:
+                return create_error_response(
+                    'NOT_FOUND',
+                    f'Product with ID {id} not found',
+                    None,
+                    404
+                )
+            return product
 
         @products_ns.doc('update_product')
         @products_ns.expect(product_model)
@@ -340,22 +368,55 @@ def create_app():
             """
             Update product.
 
-            TODO: Implement with validation
-            STEPS:
-            1. Find product (return 404 if not found)
-            2. Get request data
-            3. Validate data using validate_product_data(data, is_update=True, existing_product=product)
-            4. If validation errors, return 422 with details
-            5. Update product fields
-            6. Return updated product with 200 OK
-
             ERROR SCENARIOS:
             - Product not found → 404
             - Invalid values → 422
             - SKU conflict → 409
             """
-            # TODO: Implement PUT /products/{id}
-            pass
+            product = find_product_by_id(id)
+            if not product:
+                return create_error_response(
+                    'NOT_FOUND',
+                    f'Product with ID {id} not found',
+                    None,
+                    404
+                )
+
+            data = request.json
+
+            # Validate data
+            validation_errors = validate_product_data(data, is_update=True, existing_product=product)
+            if validation_errors:
+                # Check if SKU error (409) vs other validation errors (422)
+                if 'sku' in validation_errors and validation_errors['sku'] == 'SKU already exists':
+                    return create_error_response(
+                        'CONFLICT',
+                        'SKU already exists',
+                        {'sku': data.get('sku')},
+                        409
+                    )
+                return create_error_response(
+                    'VALIDATION_ERROR',
+                    'Validation failed',
+                    validation_errors,
+                    422
+                )
+
+            # Update product fields
+            if 'sku' in data:
+                product['sku'] = data['sku']
+            if 'name' in data:
+                product['name'] = data['name']
+            if 'description' in data:
+                product['description'] = data['description']
+            if 'price' in data:
+                product['price'] = data['price']
+            if 'stock_quantity' in data:
+                product['stock_quantity'] = data['stock_quantity']
+            if 'category' in data:
+                product['category'] = data['category']
+
+            return product
 
         @products_ns.doc('delete_product')
         @products_ns.response(204, 'Product deleted')
@@ -363,11 +424,19 @@ def create_app():
             """
             Delete product.
 
-            TODO: Implement DELETE
             STATUS CODE: 204 No Content on success
             """
-            # TODO: Implement DELETE /products/{id}
-            pass
+            product = find_product_by_id(id)
+            if not product:
+                return create_error_response(
+                    'NOT_FOUND',
+                    f'Product with ID {id} not found',
+                    None,
+                    404
+                )
+
+            products.remove(product)
+            return '', 204
 
     # ============================================================================
     # ORDERS ENDPOINTS
@@ -381,8 +450,7 @@ def create_app():
         @orders_ns.marshal_list_with(order_model)
         def get(self):
             """List all orders."""
-            # TODO: Implement GET /orders
-            pass
+            return orders
 
         @orders_ns.doc('create_order')
         @orders_ns.expect(order_model)
@@ -395,44 +463,95 @@ def create_app():
             """
             Create a new order.
 
-            TODO: Implement with comprehensive validation
-            STEPS:
-            1. Get request data
-            2. Validate required fields (customer_email, items, total_amount)
-               - If missing, return 400
-            3. Validate email format
-               - If invalid, return 422 with error details
-            4. Validate items list is not empty
-               - If empty, return 400
-            5. Calculate actual total using calculate_order_total()
-               - If product not found, return 404
-            6. Check if provided total_amount matches calculated total
-               - If mismatch, return 400 with both values in details
-            7. Check stock availability using check_stock_availability()
-               - If insufficient, return 409 with details of what's unavailable
-            8. Deduct stock from products
-            9. Create order with status 'pending'
-            10. Set created_at timestamp
-            11. Add to orders list
-            12. Return order with 201 Created
-
             ERROR SCENARIOS:
             - Missing fields → 400 Bad Request
             - Invalid email → 422 Unprocessable Entity
             - Product doesn't exist → 404 Not Found
             - Total mismatch → 400 Bad Request
             - Insufficient stock → 409 Conflict
-
-            HINT: For stock, return error like:
-            create_error_response(
-                'INSUFFICIENT_STOCK',
-                'Insufficient stock for some items',
-                {'unavailable': [{'product_id': 1, 'requested': 5, 'available': 3}]},
-                409
-            )
             """
-            # TODO: Implement POST /orders with all validations
-            pass
+            data = request.json
+
+            # Validate required fields
+            required_fields = ['customer_email', 'items', 'total_amount']
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                return create_error_response(
+                    'BAD_REQUEST',
+                    'Missing required fields',
+                    {'missing_fields': missing_fields},
+                    400
+                )
+
+            # Validate email format
+            if not validate_email(data['customer_email']):
+                return create_error_response(
+                    'VALIDATION_ERROR',
+                    'Validation failed',
+                    {'customer_email': 'Invalid email format'},
+                    422
+                )
+
+            # Validate items list is not empty
+            if not data['items'] or len(data['items']) == 0:
+                return create_error_response(
+                    'BAD_REQUEST',
+                    'Items list cannot be empty',
+                    None,
+                    400
+                )
+
+            # Calculate actual total
+            try:
+                calculated_total = calculate_order_total(data['items'])
+            except ValueError as e:
+                return create_error_response(
+                    'NOT_FOUND',
+                    str(e),
+                    None,
+                    404
+                )
+
+            # Check if provided total matches calculated total
+            if abs(data['total_amount'] - calculated_total) > 0.01:  # Allow small floating point differences
+                return create_error_response(
+                    'BAD_REQUEST',
+                    'Total amount mismatch',
+                    {
+                        'provided': data['total_amount'],
+                        'calculated': calculated_total
+                    },
+                    400
+                )
+
+            # Check stock availability
+            unavailable = check_stock_availability(data['items'])
+            if unavailable:
+                return create_error_response(
+                    'INSUFFICIENT_STOCK',
+                    'Insufficient stock for some items',
+                    {'unavailable': unavailable},
+                    409
+                )
+
+            # Deduct stock from products
+            for item in data['items']:
+                product = find_product_by_id(item['product_id'])
+                product['stock_quantity'] -= item['quantity']
+
+            # Create order
+            new_id = max([o['id'] for o in orders], default=0) + 1
+            order = {
+                'id': new_id,
+                'customer_email': data['customer_email'],
+                'items': data['items'],
+                'total_amount': data['total_amount'],
+                'status': 'pending',
+                'created_at': datetime.utcnow().isoformat() + 'Z'
+            }
+
+            orders.append(order)
+            return order, 201
 
     @orders_ns.route('/<int:id>')
     @orders_ns.response(404, 'Order not found')
@@ -444,8 +563,20 @@ def create_app():
         @orders_ns.marshal_with(order_model)
         def get(self, id):
             """Get order by ID."""
-            # TODO: Implement GET /orders/{id}
-            pass
+            order = None
+            for o in orders:
+                if o['id'] == id:
+                    order = o
+                    break
+
+            if not order:
+                return create_error_response(
+                    'NOT_FOUND',
+                    f'Order with ID {id} not found',
+                    None,
+                    404
+                )
+            return order
 
     @orders_ns.route('/<int:id>/cancel')
     @orders_ns.response(404, 'Order not found')
@@ -460,21 +591,43 @@ def create_app():
             """
             Cancel an order and restore stock.
 
-            TODO: Implement order cancellation
-            STEPS:
-            1. Find order (return 404 if not found)
-            2. Check if already cancelled
-               - If status is 'cancelled', return 400
-            3. Restore stock for all items in the order
-            4. Set status to 'cancelled'
-            5. Return updated order with 200 OK
-
             ERROR SCENARIOS:
             - Order not found → 404
             - Already cancelled → 400
             """
-            # TODO: Implement PATCH /orders/{id}/cancel
-            pass
+            order = None
+            for o in orders:
+                if o['id'] == id:
+                    order = o
+                    break
+
+            if not order:
+                return create_error_response(
+                    'NOT_FOUND',
+                    f'Order with ID {id} not found',
+                    None,
+                    404
+                )
+
+            # Check if already cancelled
+            if order['status'] == 'cancelled':
+                return create_error_response(
+                    'BAD_REQUEST',
+                    'Order is already cancelled',
+                    None,
+                    400
+                )
+
+            # Restore stock for all items
+            for item in order['items']:
+                product = find_product_by_id(item['product_id'])
+                if product:
+                    product['stock_quantity'] += item['quantity']
+
+            # Set status to cancelled
+            order['status'] = 'cancelled'
+
+            return order
 
     # ============================================================================
     # REGISTER NAMESPACES

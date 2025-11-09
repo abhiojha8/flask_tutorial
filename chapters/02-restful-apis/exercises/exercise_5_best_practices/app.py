@@ -1,5 +1,5 @@
 """
-Exercise 5: RESTful Best Practices - API Refactoring Challenge
+Exercise 5: RESTful Best Practices - API Refactoring Challenge - SOLUTION
 
 OBJECTIVE:
 Refactor a poorly designed API to follow REST principles and industry best practices.
@@ -140,32 +140,31 @@ def create_app():
 
     def find_user_by_id(user_id):
         """Find user by ID."""
-        # TODO: Implement this helper
-        pass
+        for user in users:
+            if user['id'] == user_id:
+                return user
+        return None
 
     def find_order_by_id(order_id):
         """Find order by ID."""
-        # TODO: Implement this helper
-        pass
+        for order in orders:
+            if order['id'] == order_id:
+                return order
+        return None
 
     def calculate_order_total(items):
         """
         Calculate total for an order.
 
-        TODO: Implement total calculation
-        HINT: sum(item['price'] * item['quantity'] for item in items)
-        HINT: Round to 2 decimal places
-
         KEY CONCEPT: Calculated fields should be included in responses,
         not exposed as separate endpoints like /calculate_total
         """
-        # TODO: Implement calculation
-        pass
+        total = sum(item['price'] * item['quantity'] for item in items)
+        return round(total, 2)
 
     def get_orders_for_user(user_id):
         """Get all orders for a user."""
-        # TODO: Return list of orders where order['user_id'] == user_id
-        pass
+        return [order for order in orders if order['user_id'] == user_id]
 
     # ============================================================================
     # USERS ENDPOINTS - RESTful Design
@@ -187,15 +186,13 @@ def create_app():
             """
             List all users.
 
-            TODO: Implement this endpoint
             REFACTORING: Changed from /getAllUsers to /users
             WHY: URLs should be resource-based (nouns), not action-based (verbs)
 
             OLD: GET /getAllUsers
             NEW: GET /users
             """
-            # TODO: Return users list
-            pass
+            return users
 
         @users_ns.doc('create_user')
         @users_ns.expect(user_model)
@@ -204,7 +201,6 @@ def create_app():
             """
             Create a new user.
 
-            TODO: Implement user creation
             REFACTORING: Changed from /createUser to /users with POST method
 
             OLD: POST /createUser
@@ -212,16 +208,26 @@ def create_app():
 
             WHY: HTTP methods define the action, not the URL
             """
-            # TODO: Implement POST /users
-            # STEPS:
-            # 1. Get request data
-            # 2. Validate required fields (name, email)
-            # 3. Generate new ID
-            # 4. Set active to True by default
-            # 5. Set created_at to today
-            # 6. Add to users list
-            # 7. Return user with 201
-            pass
+            data = request.json
+
+            # Validate required fields
+            if 'name' not in data or 'email' not in data:
+                return {'error': 'Missing required fields: name and email'}, 400
+
+            # Generate new ID
+            new_id = max([u['id'] for u in users], default=0) + 1
+
+            # Create user
+            user = {
+                'id': new_id,
+                'name': data['name'],
+                'email': data['email'],
+                'active': True,  # Default to True
+                'created_at': datetime.utcnow().strftime('%Y-%m-%d')
+            }
+
+            users.append(user)
+            return user, 201
 
     @users_ns.route('/<int:id>')
     @users_ns.param('id', 'User identifier')
@@ -240,7 +246,6 @@ def create_app():
             """
             Get user by ID.
 
-            TODO: Implement this endpoint
             REFACTORING: Changed from query parameter to path parameter
 
             OLD: GET /getUserById?id=123
@@ -248,8 +253,10 @@ def create_app():
 
             WHY: Resource identifiers belong in the path, not query string
             """
-            # TODO: Find user by ID, return 404 if not found
-            pass
+            user = find_user_by_id(id)
+            if not user:
+                return {'error': 'User not found'}, 404
+            return user
 
         @users_ns.doc('update_user')
         @users_ns.expect(user_model)
@@ -258,7 +265,6 @@ def create_app():
             """
             Update user information.
 
-            TODO: Implement user update
             REFACTORING: Changed from POST to PUT method
 
             OLD: POST /updateUserInfo
@@ -266,8 +272,21 @@ def create_app():
 
             WHY: PUT is the standard HTTP method for updates
             """
-            # TODO: Implement PUT /users/{id}
-            pass
+            user = find_user_by_id(id)
+            if not user:
+                return {'error': 'User not found'}, 404
+
+            data = request.json
+
+            # Update fields
+            if 'name' in data:
+                user['name'] = data['name']
+            if 'email' in data:
+                user['email'] = data['email']
+            if 'active' in data:
+                user['active'] = data['active']
+
+            return user
 
         @users_ns.doc('delete_user')
         @users_ns.response(204, 'User deleted')
@@ -275,7 +294,6 @@ def create_app():
             """
             Delete a user.
 
-            TODO: Implement user deletion
             REFACTORING: Changed from POST with query param to DELETE method
 
             OLD: POST /deleteUser?userId=123
@@ -283,8 +301,12 @@ def create_app():
 
             WHY: DELETE is the idempotent method for removing resources
             """
-            # TODO: Implement DELETE /users/{id}
-            pass
+            user = find_user_by_id(id)
+            if not user:
+                return {'error': 'User not found'}, 404
+
+            users.remove(user)
+            return '', 204
 
     @users_ns.route('/search')
     class UserSearch(Resource):
@@ -302,7 +324,6 @@ def create_app():
             """
             Search users by name.
 
-            TODO: Implement search
             REFACTORING: Moved under /users resource
 
             OLD: GET /user_search?name=john
@@ -310,12 +331,14 @@ def create_app():
 
             WHY: Search is an operation on users, should be under /users
             ALTERNATIVE: Could also use GET /users?name=john (filtering)
-
-            HINT: Get 'name' from request.args
-            HINT: Filter users where name contains the search term (case-insensitive)
             """
-            # TODO: Implement search
-            pass
+            name = request.args.get('name', '')
+            if not name:
+                return users
+
+            # Filter users where name contains the search term (case-insensitive)
+            result = [u for u in users if name.lower() in u['name'].lower()]
+            return result
 
     @users_ns.route('/<int:id>/activate')
     @users_ns.param('id', 'User identifier')
@@ -334,7 +357,6 @@ def create_app():
             """
             Activate a user account.
 
-            TODO: Implement activation
             REFACTORING: Changed to PATCH on specific resource
 
             OLD: POST /user_activate
@@ -342,14 +364,13 @@ def create_app():
 
             WHY: This is a partial update (changing active field), use PATCH
             WHY: Resource ID should be in path, not body
-
-            STEPS:
-            1. Find user (404 if not found)
-            2. Set active to True
-            3. Return updated user with 200
             """
-            # TODO: Implement PATCH /users/{id}/activate
-            pass
+            user = find_user_by_id(id)
+            if not user:
+                return {'error': 'User not found'}, 404
+
+            user['active'] = True
+            return user
 
     @users_ns.route('/<int:id>/deactivate')
     @users_ns.param('id', 'User identifier')
@@ -367,12 +388,13 @@ def create_app():
         def patch(self, id):
             """
             Deactivate a user account.
-
-            TODO: Implement deactivation
-            HINT: Similar to activate, but set active to False
             """
-            # TODO: Implement PATCH /users/{id}/deactivate
-            pass
+            user = find_user_by_id(id)
+            if not user:
+                return {'error': 'User not found'}, 404
+
+            user['active'] = False
+            return user
 
     @users_ns.route('/<int:id>/orders')
     @users_ns.param('id', 'User identifier')
@@ -391,7 +413,6 @@ def create_app():
             """
             Get all orders for a user.
 
-            TODO: Implement this endpoint
             REFACTORING: Changed to nested resource
 
             OLD: GET /fetchUserOrders?userId=123
@@ -399,15 +420,20 @@ def create_app():
 
             WHY: Orders belong to users, nesting shows this relationship clearly
             WHY: No action verbs like "fetch" in URL
-
-            STEPS:
-            1. Verify user exists (404 if not)
-            2. Get all orders for this user
-            3. For each order, calculate and include total
-            4. Return orders list
             """
-            # TODO: Implement GET /users/{id}/orders
-            pass
+            # Verify user exists
+            user = find_user_by_id(id)
+            if not user:
+                return {'error': 'User not found'}, 404
+
+            # Get all orders for this user
+            user_orders = get_orders_for_user(id)
+
+            # Calculate and include total for each order
+            for order in user_orders:
+                order['total'] = calculate_order_total(order['items'])
+
+            return user_orders
 
     # ============================================================================
     # ORDERS ENDPOINTS - RESTful Design
@@ -428,12 +454,14 @@ def create_app():
         def get(self):
             """
             List all orders.
-
-            TODO: Implement this endpoint
-            HINT: Include calculated total for each order
             """
-            # TODO: Return all orders with totals
-            pass
+            # Include calculated total for each order
+            result = []
+            for order in orders:
+                order_copy = order.copy()
+                order_copy['total'] = calculate_order_total(order['items'])
+                result.append(order_copy)
+            return result
 
         @orders_ns.doc('create_order')
         @orders_ns.expect(order_model)
@@ -442,7 +470,6 @@ def create_app():
             """
             Create a new order.
 
-            TODO: Implement order creation
             REFACTORING: Changed from action-based to resource-based
 
             OLD: POST /placeNewOrder
@@ -450,21 +477,39 @@ def create_app():
 
             WHY: POST on a collection creates a new resource
             WHY: No need for action verbs like "place" or "new"
-
-            STEPS:
-            1. Get request data
-            2. Validate required fields (user_id, items)
-            3. Verify user exists
-            4. Validate items list not empty
-            5. Generate new ID
-            6. Set status to 'pending'
-            7. Set created_at to today
-            8. Calculate and include total
-            9. Add to orders list
-            10. Return order with 201
             """
-            # TODO: Implement POST /orders
-            pass
+            data = request.json
+
+            # Validate required fields
+            if 'user_id' not in data or 'items' not in data:
+                return {'error': 'Missing required fields: user_id and items'}, 400
+
+            # Verify user exists
+            user = find_user_by_id(data['user_id'])
+            if not user:
+                return {'error': 'User not found'}, 404
+
+            # Validate items list not empty
+            if not data['items'] or len(data['items']) == 0:
+                return {'error': 'Items list cannot be empty'}, 400
+
+            # Generate new ID
+            new_id = max([o['id'] for o in orders], default=0) + 1
+
+            # Create order
+            order = {
+                'id': new_id,
+                'user_id': data['user_id'],
+                'items': data['items'],
+                'status': 'pending',
+                'created_at': datetime.utcnow().strftime('%Y-%m-%d')
+            }
+
+            # Calculate and include total
+            order['total'] = calculate_order_total(order['items'])
+
+            orders.append(order)
+            return order, 201
 
     @orders_ns.route('/<int:id>')
     @orders_ns.param('id', 'Order identifier')
@@ -484,7 +529,6 @@ def create_app():
             """
             Get order details including status and total.
 
-            TODO: Implement this endpoint
             REFACTORING: Consolidated multiple endpoints into one
 
             OLD: GET /getOrderStatus?orderId=456
@@ -494,11 +538,15 @@ def create_app():
             WHY: One resource = one endpoint
             WHY: Calculated values should be included in response,
                  not exposed as separate endpoints
-
-            HINT: Include calculated total in response
             """
-            # TODO: Find order, calculate total, return with 200
-            pass
+            order = find_order_by_id(id)
+            if not order:
+                return {'error': 'Order not found'}, 404
+
+            # Include calculated total
+            order_copy = order.copy()
+            order_copy['total'] = calculate_order_total(order['items'])
+            return order_copy
 
     @orders_ns.route('/<int:id>/cancel')
     @orders_ns.param('id', 'Order identifier')
@@ -517,7 +565,6 @@ def create_app():
             """
             Cancel an order.
 
-            TODO: Implement order cancellation
             REFACTORING: Changed to PATCH on specific resource
 
             OLD: POST /cancelOrderNow
@@ -526,16 +573,22 @@ def create_app():
             WHY: Cancellation is a partial update (changing status)
             WHY: Use PATCH for partial updates
             WHY: Resource ID in path, not body
-
-            STEPS:
-            1. Find order (404 if not found)
-            2. Check if already cancelled (400 if already cancelled)
-            3. Set status to 'cancelled'
-            4. Calculate and include total in response
-            5. Return updated order with 200
             """
-            # TODO: Implement PATCH /orders/{id}/cancel
-            pass
+            order = find_order_by_id(id)
+            if not order:
+                return {'error': 'Order not found'}, 404
+
+            # Check if already cancelled
+            if order['status'] == 'cancelled':
+                return {'error': 'Order is already cancelled'}, 400
+
+            # Set status to cancelled
+            order['status'] = 'cancelled'
+
+            # Calculate and include total in response
+            order_copy = order.copy()
+            order_copy['total'] = calculate_order_total(order['items'])
+            return order_copy
 
     # ============================================================================
     # REGISTER NAMESPACES

@@ -1,5 +1,5 @@
 """
-Exercise 4: Nested Resources - School Management API
+Exercise 4: Nested Resources - School Management API - SOLUTION
 
 OBJECTIVE:
 Design and implement properly nested resources showing parent-child relationships.
@@ -162,66 +162,69 @@ def create_app():
 
     def find_school_by_id(school_id):
         """Find school by ID."""
-        # TODO: Implement this helper
-        pass
+        for school in schools:
+            if school['id'] == school_id:
+                return school
+        return None
 
     def find_class_by_id(class_id):
         """Find class by ID."""
-        # TODO: Implement this helper
-        pass
+        for cls in classes:
+            if cls['id'] == class_id:
+                return cls
+        return None
 
     def find_student_by_id(student_id):
         """Find student by ID."""
-        # TODO: Implement this helper
-        pass
+        for student in students:
+            if student['id'] == student_id:
+                return student
+        return None
 
     def find_grade_by_id(grade_id):
         """Find grade by ID."""
-        # TODO: Implement this helper
-        pass
+        for grade in grades:
+            if grade['id'] == grade_id:
+                return grade
+        return None
 
     def get_classes_for_school(school_id):
         """Get all classes belonging to a school."""
-        # TODO: Return list of classes where class['school_id'] == school_id
-        pass
+        return [cls for cls in classes if cls['school_id'] == school_id]
 
     def get_students_for_class(class_id):
         """Get all students in a class."""
-        # TODO: Return list of students where student['class_id'] == class_id
-        pass
+        return [student for student in students if student['class_id'] == class_id]
 
     def get_grades_for_student(student_id):
         """Get all grades for a student."""
-        # TODO: Return list of grades where grade['student_id'] == student_id
-        pass
+        return [grade for grade in grades if grade['student_id'] == student_id]
 
     def update_class_student_count(class_id):
         """Update student count for a class."""
-        # TODO: Count students in this class and update class['student_count']
-        # HINT: Find the class, count students with matching class_id
-        pass
+        cls = find_class_by_id(class_id)
+        if cls:
+            cls['student_count'] = len(get_students_for_class(class_id))
 
     def update_school_student_count(school_id):
         """Update total student count for a school."""
-        # TODO: Count all students in all classes of this school
-        # HINT: Get all classes for school, then count students with matching school_id
-        pass
+        school = find_school_by_id(school_id)
+        if school:
+            # Count all students in all classes of this school
+            total = len([s for s in students if s['school_id'] == school_id])
+            school['student_count'] = total
 
     def validate_parent_child_relationship(school_id, class_id):
         """
         Validate that a class belongs to a school.
 
-        TODO: Implement relationship validation
-        STEPS:
-        1. Find the class by class_id
-        2. Check if class['school_id'] == school_id
-        3. Return True if match, False otherwise
-
         WHY?: For nested endpoints like /schools/{school_id}/classes/{class_id}/students,
         we need to verify the class actually belongs to that school.
         """
-        # TODO: Implement validation
-        pass
+        cls = find_class_by_id(class_id)
+        if not cls:
+            return False
+        return cls['school_id'] == school_id
 
     # ============================================================================
     # SCHOOLS ENDPOINTS
@@ -235,8 +238,7 @@ def create_app():
         @schools_ns.marshal_list_with(school_model)
         def get(self):
             """List all schools."""
-            # TODO: Return schools list
-            pass
+            return schools
 
         @schools_ns.doc('create_school')
         @schools_ns.expect(school_model)
@@ -244,18 +246,27 @@ def create_app():
         def post(self):
             """
             Create a new school.
-
-            TODO: Implement school creation
-            STEPS:
-            1. Get request data
-            2. Validate required fields (name, address)
-            3. Generate new ID
-            4. Set student_count to 0
-            5. Add to schools list
-            6. Return school with 201
             """
-            # TODO: Implement POST /schools
-            pass
+            data = request.json
+
+            # Validate required fields
+            if 'name' not in data or 'address' not in data:
+                return {'error': 'Missing required fields: name and address'}, 400
+
+            # Generate new ID
+            new_id = max([s['id'] for s in schools], default=0) + 1
+
+            # Create school
+            school = {
+                'id': new_id,
+                'name': data['name'],
+                'address': data['address'],
+                'principal': data.get('principal', ''),
+                'student_count': 0
+            }
+
+            schools.append(school)
+            return school, 201
 
     @schools_ns.route('/<int:school_id>')
     @schools_ns.param('school_id', 'School identifier')
@@ -266,8 +277,10 @@ def create_app():
         @schools_ns.marshal_with(school_model)
         def get(self, school_id):
             """Get school by ID."""
-            # TODO: Find school, return 404 if not found
-            pass
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+            return school
 
         @schools_ns.doc('delete_school')
         @schools_ns.response(204, 'School deleted')
@@ -275,20 +288,34 @@ def create_app():
             """
             Delete school and cascade to classes and students.
 
-            TODO: Implement cascading delete
-            STEPS:
-            1. Find school (404 if not found)
-            2. Get all classes in this school
-            3. For each class, delete all students in that class
-            4. Delete all classes in this school
-            5. Delete the school
-            6. Return 204
-
             CASCADING DELETE: When you delete a school, all related
             classes and students should also be deleted.
             """
-            # TODO: Implement DELETE /schools/{id} with cascade
-            pass
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            # Get all classes in this school
+            school_classes = get_classes_for_school(school_id)
+
+            # For each class, delete all students and grades
+            for cls in school_classes:
+                # Delete all students in this class
+                class_students = get_students_for_class(cls['id'])
+                for student in class_students:
+                    # Delete all grades for this student
+                    student_grades = get_grades_for_student(student['id'])
+                    for grade in student_grades:
+                        grades.remove(grade)
+                    # Delete student
+                    students.remove(student)
+
+                # Delete the class
+                classes.remove(cls)
+
+            # Delete the school
+            schools.remove(school)
+            return '', 204
 
     # ============================================================================
     # CLASSES ENDPOINTS (Nested under Schools)
@@ -304,15 +331,14 @@ def create_app():
         def get(self, school_id):
             """
             List all classes in a school.
-
-            TODO: Implement nested GET
-            STEPS:
-            1. Verify school exists (404 if not)
-            2. Get all classes for this school
-            3. Return classes list
             """
-            # TODO: Implement GET /schools/{school_id}/classes
-            pass
+            # Verify school exists
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            # Get all classes for this school
+            return get_classes_for_school(school_id)
 
         @schools_ns.doc('create_class_in_school')
         @schools_ns.expect(class_model)
@@ -321,22 +347,36 @@ def create_app():
             """
             Create a class in a school.
 
-            TODO: Implement nested POST
-            STEPS:
-            1. Verify school exists (404 if not) - PARENT VALIDATION
-            2. Get request data
-            3. Validate required fields (name, subject, teacher)
-            4. Generate new ID
-            5. Set school_id from URL parameter
-            6. Set student_count to 0
-            7. Add to classes list
-            8. Return class with 201
-
             KEY CONCEPT: We automatically set school_id from the URL,
             ensuring the class belongs to the correct school.
             """
-            # TODO: Implement POST /schools/{school_id}/classes
-            pass
+            # Verify school exists (PARENT VALIDATION)
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            data = request.json
+
+            # Validate required fields
+            required = ['name', 'subject', 'teacher']
+            if not all(field in data for field in required):
+                return {'error': 'Missing required fields: name, subject, teacher'}, 400
+
+            # Generate new ID
+            new_id = max([c['id'] for c in classes], default=0) + 1
+
+            # Create class
+            cls = {
+                'id': new_id,
+                'school_id': school_id,  # Set from URL
+                'name': data['name'],
+                'subject': data['subject'],
+                'teacher': data['teacher'],
+                'student_count': 0
+            }
+
+            classes.append(cls)
+            return cls, 201
 
     @schools_ns.route('/<int:school_id>/classes/<int:class_id>')
     @schools_ns.param('school_id', 'School identifier')
@@ -350,19 +390,25 @@ def create_app():
             """
             Get a specific class.
 
-            TODO: Implement nested GET with validation
-            STEPS:
-            1. Verify school exists (404 if not)
-            2. Find class (404 if not found)
-            3. Verify class belongs to school (404 if mismatch)
-            4. Return class
-
             VALIDATION: We check that the class actually belongs to
             the specified school, preventing access to /schools/1/classes/999
             if class 999 belongs to school 2.
             """
-            # TODO: Implement GET /schools/{school_id}/classes/{class_id}
-            pass
+            # Verify school exists
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            # Find class
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            # Verify class belongs to school
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            return cls
 
         @schools_ns.doc('update_class')
         @schools_ns.expect(class_model)
@@ -370,31 +416,69 @@ def create_app():
         def put(self, school_id, class_id):
             """
             Update a class.
-
-            TODO: Implement nested PUT
-            HINT: Similar to GET but update fields
-            HINT: Validate parent-child relationship
             """
-            # TODO: Implement PUT /schools/{school_id}/classes/{class_id}
-            pass
+            # Verify school exists
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            # Find class
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            # Verify class belongs to school
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            data = request.json
+
+            # Update fields
+            if 'name' in data:
+                cls['name'] = data['name']
+            if 'subject' in data:
+                cls['subject'] = data['subject']
+            if 'teacher' in data:
+                cls['teacher'] = data['teacher']
+
+            return cls
 
         @schools_ns.doc('delete_class')
         @schools_ns.response(204, 'Class deleted')
         def delete(self, school_id, class_id):
             """
             Delete a class and its students.
-
-            TODO: Implement delete with cascade
-            STEPS:
-            1. Verify school exists
-            2. Find class and verify it belongs to school
-            3. Delete all students in this class
-            4. Delete the class
-            5. Update school's student count
-            6. Return 204
             """
-            # TODO: Implement DELETE /schools/{school_id}/classes/{class_id}
-            pass
+            # Verify school exists
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            # Find class and verify it belongs to school
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            # Delete all students in this class
+            class_students = get_students_for_class(class_id)
+            for student in class_students:
+                # Delete all grades for this student
+                student_grades = get_grades_for_student(student['id'])
+                for grade in student_grades:
+                    grades.remove(grade)
+                # Delete student
+                students.remove(student)
+
+            # Delete the class
+            classes.remove(cls)
+
+            # Update school's student count
+            update_school_student_count(school_id)
+
+            return '', 204
 
     # ============================================================================
     # STUDENTS ENDPOINTS (Nested under Classes)
@@ -411,16 +495,22 @@ def create_app():
         def get(self, school_id, class_id):
             """
             List all students in a class.
-
-            TODO: Implement triple-nested GET
-            STEPS:
-            1. Verify school exists
-            2. Verify class exists and belongs to school
-            3. Get all students in this class
-            4. Return students list
             """
-            # TODO: Implement GET /schools/{school_id}/classes/{class_id}/students
-            pass
+            # Verify school exists
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            # Verify class exists and belongs to school
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            # Get all students in this class
+            return get_students_for_class(class_id)
 
         @schools_ns.doc('create_student')
         @schools_ns.expect(student_model)
@@ -428,23 +518,47 @@ def create_app():
         def post(self, school_id, class_id):
             """
             Enroll a student in a class.
-
-            TODO: Implement triple-nested POST
-            STEPS:
-            1. Verify school exists
-            2. Verify class exists and belongs to school
-            3. Get request data
-            4. Validate required fields (name, email)
-            5. Generate new ID
-            6. Set school_id and class_id from URL
-            7. Set enrollment_date to today
-            8. Add to students list
-            9. Update class student count
-            10. Update school student count
-            11. Return student with 201
             """
-            # TODO: Implement POST /schools/{school_id}/classes/{class_id}/students
-            pass
+            # Verify school exists
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            # Verify class exists and belongs to school
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            data = request.json
+
+            # Validate required fields
+            if 'name' not in data or 'email' not in data:
+                return {'error': 'Missing required fields: name and email'}, 400
+
+            # Generate new ID
+            new_id = max([s['id'] for s in students], default=0) + 1
+
+            # Create student
+            student = {
+                'id': new_id,
+                'class_id': class_id,  # Set from URL
+                'school_id': school_id,  # Set from URL
+                'name': data['name'],
+                'email': data['email'],
+                'enrollment_date': datetime.utcnow().strftime('%Y-%m-%d'),
+                'gpa': data.get('gpa', 0.0)
+            }
+
+            students.append(student)
+
+            # Update counts
+            update_class_student_count(class_id)
+            update_school_student_count(school_id)
+
+            return student, 201
 
     @schools_ns.route('/<int:school_id>/classes/<int:class_id>/students/<int:student_id>')
     @schools_ns.param('school_id', 'School identifier')
@@ -458,29 +572,67 @@ def create_app():
         def get(self, school_id, class_id, student_id):
             """
             Get a student.
-
-            TODO: Implement with full hierarchy validation
             """
-            # TODO: Implement GET /schools/{school_id}/classes/{class_id}/students/{student_id}
-            pass
+            # Validate hierarchy
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            student = find_student_by_id(student_id)
+            if not student:
+                return {'error': 'Student not found'}, 404
+
+            # Verify student belongs to this class
+            if student['class_id'] != class_id:
+                return {'error': 'Student does not belong to this class'}, 404
+
+            return student
 
         @schools_ns.doc('delete_student')
         @schools_ns.response(204, 'Student deleted')
         def delete(self, school_id, class_id, student_id):
             """
             Delete a student.
-
-            TODO: Implement delete with count updates
-            STEPS:
-            1. Validate hierarchy (school → class → student)
-            2. Delete student's grades
-            3. Delete student
-            4. Update class student count
-            5. Update school student count
-            6. Return 204
             """
-            # TODO: Implement DELETE /schools/{school_id}/classes/{class_id}/students/{student_id}
-            pass
+            # Validate hierarchy
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            student = find_student_by_id(student_id)
+            if not student:
+                return {'error': 'Student not found'}, 404
+
+            if student['class_id'] != class_id:
+                return {'error': 'Student does not belong to this class'}, 404
+
+            # Delete student's grades
+            student_grades = get_grades_for_student(student_id)
+            for grade in student_grades:
+                grades.remove(grade)
+
+            # Delete student
+            students.remove(student)
+
+            # Update counts
+            update_class_student_count(class_id)
+            update_school_student_count(school_id)
+
+            return '', 204
 
     # ============================================================================
     # GRADES ENDPOINTS (Nested under Students)
@@ -498,11 +650,28 @@ def create_app():
         def get(self, school_id, class_id, student_id):
             """
             Get all grades for a student.
-
-            TODO: Implement 4-level nested GET
             """
-            # TODO: Implement GET /schools/{school_id}/classes/{class_id}/students/{student_id}/grades
-            pass
+            # Validate full hierarchy
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            student = find_student_by_id(student_id)
+            if not student:
+                return {'error': 'Student not found'}, 404
+
+            if student['class_id'] != class_id:
+                return {'error': 'Student does not belong to this class'}, 404
+
+            # Get all grades for this student
+            return get_grades_for_student(student_id)
 
         @schools_ns.doc('create_grade')
         @schools_ns.expect(grade_model)
@@ -510,11 +679,48 @@ def create_app():
         def post(self, school_id, class_id, student_id):
             """
             Add a grade for a student.
-
-            TODO: Implement 4-level nested POST
             """
-            # TODO: Implement POST /schools/{school_id}/classes/{class_id}/students/{student_id}/grades
-            pass
+            # Validate full hierarchy
+            school = find_school_by_id(school_id)
+            if not school:
+                return {'error': 'School not found'}, 404
+
+            cls = find_class_by_id(class_id)
+            if not cls:
+                return {'error': 'Class not found'}, 404
+
+            if not validate_parent_child_relationship(school_id, class_id):
+                return {'error': 'Class does not belong to this school'}, 404
+
+            student = find_student_by_id(student_id)
+            if not student:
+                return {'error': 'Student not found'}, 404
+
+            if student['class_id'] != class_id:
+                return {'error': 'Student does not belong to this class'}, 404
+
+            data = request.json
+
+            # Validate required fields
+            required = ['subject', 'grade', 'score']
+            if not all(field in data for field in required):
+                return {'error': 'Missing required fields: subject, grade, score'}, 400
+
+            # Generate new ID
+            new_id = max([g['id'] for g in grades], default=0) + 1
+
+            # Create grade
+            grade = {
+                'id': new_id,
+                'student_id': student_id,  # Set from URL
+                'subject': data['subject'],
+                'grade': data['grade'],
+                'score': data['score'],
+                'date': datetime.utcnow().strftime('%Y-%m-%d')
+            }
+
+            grades.append(grade)
+            return grade, 201
 
     # ============================================================================
     # FLAT ALTERNATIVE ENDPOINTS (For convenience)
@@ -540,11 +746,12 @@ def create_app():
             """
             Get student by ID (flat endpoint).
 
-            TODO: Simply find and return student by ID
             BENEFIT: Shorter URL when you already know the student ID
             """
-            # TODO: Implement GET /students/{id}
-            pass
+            student = find_student_by_id(id)
+            if not student:
+                return {'error': 'Student not found'}, 404
+            return student
 
     @students_flat_ns.route('/<int:id>/grades')
     @students_flat_ns.param('id', 'Student identifier')
@@ -557,11 +764,13 @@ def create_app():
             """
             Get all grades for a student (flat).
 
-            TODO: Verify student exists, then return grades
             BENEFIT: /students/3/grades is much shorter than the nested version
             """
-            # TODO: Implement GET /students/{id}/grades
-            pass
+            student = find_student_by_id(id)
+            if not student:
+                return {'error': 'Student not found'}, 404
+
+            return get_grades_for_student(id)
 
     # ============================================================================
     # REGISTER NAMESPACES
