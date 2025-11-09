@@ -211,6 +211,7 @@ __marimo__/
 # ============================================
 # Live Coding Guides (Instructor's reference)
 **/LIVE_CODING_GUIDE.md
+**/LIVE_CODING_GUIDE_*.md
 **/TEACHING_NOTES.md
 **/INSTRUCTOR_GUIDE.md
 **/PRESENTER_NOTES.md
