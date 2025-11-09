@@ -112,10 +112,10 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # TODO: Enable SQL query logging for debugging
-    # HINT: app.config['SQLALCHEMY_ECHO'] = True
+    # Enable SQL query logging for debugging
     # This will print all SQL queries to the console!
     # Useful for finding N+1 problems and slow queries.
+    app.config['SQLALCHEMY_ECHO'] = True
 
     api = Api(
         app,
@@ -139,7 +139,7 @@ def create_app():
         """
         Helper function to create audit log entries.
 
-        TODO: Implement this function to create AuditLog records.
+        Implement this function to create AuditLog records.
 
         Args:
             user_id: ID of user making the change (can be None for system actions)
@@ -149,23 +149,29 @@ def create_app():
             old_values: Dictionary of old values (for update/delete)
             new_values: Dictionary of new values (for create/update)
         """
-        # TODO: Get IP address from request
-        # HINT: ip_address = request.remote_addr if request else None
+        try:
+            # Get IP address from request
+            ip_address = request.remote_addr if request else None
 
-        # TODO: Create AuditLog entry
-        # HINT: audit = AuditLog(
-        #           user_id=user_id,
-        #           action=action,
-        #           table_name=table_name,
-        #           record_id=record_id,
-        #           old_values=json.dumps(old_values) if old_values else None,
-        #           new_values=json.dumps(new_values) if new_values else None,
-        #           ip_address=ip_address,
-        #           created_at=datetime.utcnow()
-        #       )
+            # Create AuditLog entry
+            audit = AuditLog(
+                user_id=user_id,
+                action=action,
+                table_name=table_name,
+                record_id=record_id,
+                old_values=json.dumps(old_values) if old_values else None,
+                new_values=json.dumps(new_values) if new_values else None,
+                ip_address=ip_address,
+                created_at=datetime.utcnow()
+            )
 
-        # TODO: Add and commit
-        pass
+            # Add and commit
+            db.session.add(audit)
+            db.session.commit()
+        except Exception as e:
+            # Don't fail the main operation if audit logging fails
+            db.session.rollback()
+            print(f"[WARNING] Audit logging failed: {e}")
 
     # ============================================================================
     # DATABASE MODELS
@@ -183,17 +189,17 @@ def create_app():
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        # TODO: Add deleted_at for soft deletes
-        # HINT: deleted_at = db.Column(db.DateTime, nullable=True)
+        # Soft delete support
+        deleted_at = db.Column(db.DateTime, nullable=True)
 
         # Relationships
         users = db.relationship('User', backref='organization', lazy=True)
         posts = db.relationship('Post', backref='organization', lazy=True)
 
-        # TODO: Add composite index for common query patterns
-        # HINT: __table_args__ = (
-        #           Index('idx_org_active_plan', 'is_active', 'plan'),
-        #       )
+        # Composite index for common query patterns
+        __table_args__ = (
+            Index('idx_org_active_plan', 'is_active', 'plan'),
+        )
 
 
     class User(db.Model):
@@ -209,17 +215,17 @@ def create_app():
         created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        # TODO: Add deleted_at for soft deletes
-        # HINT: deleted_at = db.Column(db.DateTime, nullable=True, index=True)
+        # Soft delete support
         # Index on deleted_at allows fast filtering of active vs deleted records
+        deleted_at = db.Column(db.DateTime, nullable=True, index=True)
 
         # Relationships
         posts = db.relationship('Post', backref='author', lazy=True, cascade='all, delete-orphan')
 
-        # TODO: Add composite index for common queries
-        # HINT: __table_args__ = (
-        #           Index('idx_user_org_active', 'organization_id', 'is_active'),
-        #       )
+        # Composite index for common queries
+        __table_args__ = (
+            Index('idx_user_org_active', 'organization_id', 'is_active'),
+        )
 
         def to_dict(self):
             """Convert to dictionary."""
@@ -250,18 +256,17 @@ def create_app():
         created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        # TODO: Add deleted_at for soft deletes
-        # HINT: deleted_at = db.Column(db.DateTime, nullable=True, index=True)
+        # Soft delete support
+        deleted_at = db.Column(db.DateTime, nullable=True, index=True)
 
-        # TODO: Add composite indexes for common query patterns
-        # HINT: __table_args__ = (
-        #           Index('idx_post_org_status', 'organization_id', 'status'),
-        #           Index('idx_post_org_created', 'organization_id', 'created_at'),
-        #       )
-        #
+        # Composite indexes for common query patterns
         # WHY THESE INDEXES?
         # - idx_post_org_status: Fast queries like "get all published posts in org X"
         # - idx_post_org_created: Fast queries like "get recent posts in org X"
+        __table_args__ = (
+            Index('idx_post_org_status', 'organization_id', 'status'),
+            Index('idx_post_org_created', 'organization_id', 'created_at'),
+        )
 
         def to_dict(self, include_author=False):
             """Convert to dictionary."""
@@ -282,8 +287,6 @@ def create_app():
             return result
 
 
-    # TODO: Define AuditLog model
-
     class AuditLog(db.Model):
         """
         Audit log model for tracking all data changes.
@@ -296,31 +299,35 @@ def create_app():
         """
         __tablename__ = 'audit_logs'
 
-        # TODO: Define all columns
-        # HINT: Use JSON type for old_values and new_values
-        # HINT: from sqlalchemy.dialects.postgresql import JSON
-        # HINT: old_values = db.Column(JSON, nullable=True)
+        # Define all columns
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+        action = db.Column(db.String(50), nullable=False, index=True)
+        table_name = db.Column(db.String(50), nullable=False, index=True)
+        record_id = db.Column(db.Integer, nullable=False, index=True)
+        old_values = db.Column(db.Text, nullable=True)  # JSON as text
+        new_values = db.Column(db.Text, nullable=True)  # JSON as text
+        ip_address = db.Column(db.String(45), nullable=True)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
-        id = None  # TODO: db.Column(db.Integer, primary_key=True)
-        user_id = None  # TODO: db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-        action = None  # TODO: db.Column(db.String(50), nullable=False, index=True)
-        table_name = None  # TODO: db.Column(db.String(50), nullable=False, index=True)
-        record_id = None  # TODO: db.Column(db.Integer, nullable=False, index=True)
-        old_values = None  # TODO: db.Column(db.Text, nullable=True)  # JSON as text
-        new_values = None  # TODO: db.Column(db.Text, nullable=True)  # JSON as text
-        ip_address = None  # TODO: db.Column(db.String(45), nullable=True)
-        created_at = None  # TODO: db.Column(db.DateTime, default=datetime.utcnow, index=True)
-
-        # TODO: Add composite index for efficient querying
-        # HINT: __table_args__ = (
-        #           Index('idx_audit_table_record', 'table_name', 'record_id'),
-        #       )
+        # Composite index for efficient querying
+        __table_args__ = (
+            Index('idx_audit_table_record', 'table_name', 'record_id'),
+        )
 
         def to_dict(self):
             """Convert to dictionary."""
-            # TODO: Return dictionary with all fields
-            # HINT: Parse old_values and new_values from JSON strings
-            pass
+            return {
+                'id': self.id,
+                'user_id': self.user_id,
+                'action': self.action,
+                'table_name': self.table_name,
+                'record_id': self.record_id,
+                'old_values': json.loads(self.old_values) if self.old_values else None,
+                'new_values': json.loads(self.new_values) if self.new_values else None,
+                'ip_address': self.ip_address,
+                'created_at': self.created_at.isoformat() if self.created_at else None
+            }
 
     # ============================================================================
     # CREATE TABLES
@@ -379,7 +386,7 @@ def create_app():
             """
             List audit logs with optional filters.
 
-            TODO: Implement audit log querying with filters.
+            Implement audit log querying with filters.
 
             QUERY PARAMETERS:
             - table_name: Filter logs for specific table
@@ -389,12 +396,23 @@ def create_app():
             PERFORMANCE TIP:
             Use the composite index idx_audit_table_record for fast filtering!
             """
-            # TODO: Build query with optional filters
-            # HINT: query = AuditLog.query
-            # HINT: if 'table_name' in request.args:
-            #           query = query.filter_by(table_name=request.args['table_name'])
-            # HINT: Order by created_at descending (most recent first)
-            pass
+            # Build query with optional filters
+            query = AuditLog.query
+
+            # Apply filters if provided
+            if 'table_name' in request.args:
+                query = query.filter_by(table_name=request.args['table_name'])
+
+            if 'record_id' in request.args:
+                query = query.filter_by(record_id=int(request.args['record_id']))
+
+            if 'action' in request.args:
+                query = query.filter_by(action=request.args['action'])
+
+            # Order by created_at descending (most recent first)
+            logs = query.order_by(AuditLog.created_at.desc()).all()
+
+            return [log.to_dict() for log in logs]
 
     # ============================================================================
     # USER ENDPOINTS WITH AUDIT LOGGING
@@ -410,14 +428,14 @@ def create_app():
             """
             List all active (non-deleted) users.
 
-            TODO: Filter out soft-deleted users.
+            Filter out soft-deleted users.
 
             IMPORTANT: Only show users where deleted_at IS NULL
             """
-            # TODO: Implement GET /users with soft delete filtering
-            # HINT: User.query.filter(User.deleted_at.is_(None)).all()
-            # Or: User.query.filter_by(deleted_at=None).all()
-            pass
+            # Implement GET /users with soft delete filtering
+            # Only show users where deleted_at IS NULL
+            users = User.query.filter(User.deleted_at.is_(None)).all()
+            return [user.to_dict() for user in users]
 
     @users_ns.route('/<int:id>')
     @users_ns.param('id', 'User identifier')
@@ -431,7 +449,7 @@ def create_app():
             """
             Soft delete user (mark as deleted, don't actually delete).
 
-            TODO: Implement soft delete.
+            Implement soft delete.
 
             STEPS:
             1. Get user
@@ -440,10 +458,23 @@ def create_app():
             4. Log audit (action='delete', save old values)
             5. Return 204
             """
-            # TODO: Implement soft DELETE /users/<id>
-            # HINT: user.deleted_at = datetime.utcnow()
-            # HINT: log_audit(None, 'delete', 'users', id, old_values=user.to_dict())
-            pass
+            # Get user
+            user = User.query.get_or_404(id)
+
+            # Save old values for audit log
+            old_values = user.to_dict()
+
+            # Soft delete: set deleted_at timestamp
+            user.deleted_at = datetime.utcnow()
+
+            # Commit
+            db.session.commit()
+
+            # Log audit (action='delete', save old values)
+            log_audit(None, 'delete', 'users', id, old_values=old_values)
+
+            # Return 204
+            return '', 204
 
     @users_ns.route('/<int:id>/restore')
     @users_ns.param('id', 'User identifier')
@@ -457,7 +488,7 @@ def create_app():
             """
             Restore a soft-deleted user.
 
-            TODO: Implement restore functionality.
+            Implement restore functionality.
 
             STEPS:
             1. Get user (including deleted ones!)
@@ -467,11 +498,24 @@ def create_app():
             5. Log audit (action='restore')
             6. Return user
             """
-            # TODO: Implement POST /users/<id>/restore
-            # HINT: user = User.query.get_or_404(id)  # Gets even deleted users
-            # HINT: if not user.deleted_at: return error
-            # HINT: user.deleted_at = None
-            pass
+            # Get user (including deleted ones!)
+            user = User.query.get_or_404(id)
+
+            # Check if user is actually deleted
+            if not user.deleted_at:
+                return {'message': 'User is not deleted'}, 400
+
+            # Restore: set deleted_at to None
+            user.deleted_at = None
+
+            # Commit
+            db.session.commit()
+
+            # Log audit (action='restore')
+            log_audit(None, 'restore', 'users', id, new_values=user.to_dict())
+
+            # Return user
+            return user.to_dict()
 
     # ============================================================================
     # POST ENDPOINTS WITH EAGER LOADING
@@ -486,18 +530,20 @@ def create_app():
             """
             List all posts with author info (OPTIMIZED - no N+1 queries).
 
-            TODO: Use eager loading to prevent N+1 queries.
+            Use eager loading to prevent N+1 queries.
 
             IMPORTANT: Enable SQLALCHEMY_ECHO to see the SQL!
             Without joinedload: You'll see 1 + N queries
             With joinedload: You'll see 1 query with JOIN
             """
-            # TODO: Implement with eager loading
-            # HINT: posts = Post.query.filter(Post.deleted_at.is_(None))\
-            #                        .options(joinedload(Post.author))\
-            #                        .all()
-            # HINT: Return [post.to_dict(include_author=True) for post in posts]
-            pass
+            # Implement with eager loading
+            # Filter out soft-deleted posts and use eager loading for author
+            posts = Post.query.filter(Post.deleted_at.is_(None))\
+                              .options(joinedload(Post.author))\
+                              .all()
+
+            # Return posts with author info
+            return [post.to_dict(include_author=True) for post in posts]
 
     # ============================================================================
     # REGISTER NAMESPACES

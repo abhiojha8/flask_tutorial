@@ -138,28 +138,34 @@ def create_app():
         # HINT: slug should be unique and URL-friendly (e.g., 'acme-corp')
         # HINT: plan should default to 'free'
 
-        id = None  # TODO: db.Column(db.Integer, primary_key=True)
-        name = None  # TODO: db.Column(db.String(100), unique=True, nullable=False)
-        slug = None  # TODO: db.Column(db.String(50), unique=True, nullable=False)
-        plan = None  # TODO: db.Column(db.String(20), default='free')
-        is_active = None  # TODO: db.Column(db.Boolean, default=True)
-        created_at = None  # TODO: db.Column(db.DateTime, default=datetime.utcnow)
-        updated_at = None  # TODO: db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        id = db.Column(db.Integer, primary_key=True)
+        name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+        slug = db.Column(db.String(50), unique=True, nullable=False, index=True)
+        plan = db.Column(db.String(20), default='free')
+        is_active = db.Column(db.Boolean, default=True)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        # TODO: Add relationships
-        # HINT: users = db.relationship('User', backref='organization', lazy=True)
-        # HINT: posts = db.relationship('Post', backref='organization', lazy=True)
-        #
+        # Relationships
         # This allows:
         # - org.users → Get all users in this organization
         # - org.posts → Get all posts in this organization
         # - user.organization → Get the user's organization
         # - post.organization → Get the post's organization
+        users = db.relationship('User', backref='organization', lazy=True)
+        posts = db.relationship('Post', backref='organization', lazy=True)
 
         def to_dict(self):
             """Convert Organization to dictionary."""
-            # TODO: Return dictionary with all fields
-            pass
+            return {
+                'id': self.id,
+                'name': self.name,
+                'slug': self.slug,
+                'plan': self.plan,
+                'is_active': self.is_active,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
 
     class User(db.Model):
         """
@@ -178,8 +184,8 @@ def create_app():
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        # TODO: Add organization_id foreign key
-        # HINT: organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
+        # Foreign key to organization
+        organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False, index=True)
 
         # Relationship to posts (from Exercise 2)
         posts = db.relationship('Post', backref='author', lazy=True, cascade='all, delete-orphan')
@@ -192,16 +198,14 @@ def create_app():
                 'email': self.email,
                 'full_name': self.full_name,
                 'is_active': self.is_active,
+                'organization_id': self.organization_id,
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'updated_at': self.updated_at.isoformat() if self.updated_at else None
             }
 
-            # TODO: Add organization_id to result
-            # HINT: result['organization_id'] = self.organization_id
-
-            # TODO: If include_organization, add organization details
-            # HINT: if include_organization and self.organization:
-            #           result['organization'] = self.organization.to_dict()
+            # If include_organization, add organization details
+            if include_organization and self.organization:
+                result['organization'] = self.organization.to_dict()
 
             return result
 
@@ -225,14 +229,15 @@ def create_app():
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        # TODO: Add organization_id foreign key
-        # HINT: organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
+        # Foreign key to organization
+        organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False, index=True)
 
         def to_dict(self, include_author=False, include_organization=False):
             """Convert Post to dictionary."""
             result = {
                 'id': self.id,
                 'user_id': self.user_id,
+                'organization_id': self.organization_id,
                 'title': self.title,
                 'content': self.content,
                 'status': self.status,
@@ -241,14 +246,13 @@ def create_app():
                 'updated_at': self.updated_at.isoformat() if self.updated_at else None
             }
 
-            # TODO: Add organization_id to result
-            # HINT: result['organization_id'] = self.organization_id
+            # If include_author, add author details
+            if include_author and self.author:
+                result['author'] = self.author.to_dict()
 
-            # TODO: If include_author, add author details
-            # HINT: if include_author and self.author: ...
-
-            # TODO: If include_organization, add organization details
-            # HINT: if include_organization and self.organization: ...
+            # If include_organization, add organization details
+            if include_organization and self.organization:
+                result['organization'] = self.organization.to_dict()
 
             return result
 
@@ -258,7 +262,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-        print("✅ Database tables created successfully!")
+        print("[OK] Database tables created successfully!")
         print("   - organizations table (NEW)")
         print("   - users table (with organization_id)")
         print("   - posts table (with organization_id)")
@@ -328,11 +332,10 @@ def create_app():
             """
             List all organizations.
 
-            TODO: Query all organizations.
+            Query all organizations.
             """
-            # TODO: Implement GET /organizations
-            # HINT: Organization.query.all()
-            pass
+            organizations = Organization.query.all()
+            return [org.to_dict() for org in organizations]
 
         @orgs_ns.doc('create_organization')
         @orgs_ns.expect(org_input_model)
@@ -343,17 +346,35 @@ def create_app():
             """
             Create a new organization.
 
-            TODO: Create organization with validation.
+            Create organization with validation.
 
             VALIDATION:
             - name must be unique
             - slug must be unique
             - slug should be URL-friendly (lowercase, hyphens, no spaces)
             """
-            # TODO: Implement POST /organizations
-            # HINT: Check if name or slug already exists
-            # HINT: Return 409 if duplicate
-            pass
+            data = request.json
+
+            # Check for duplicate name
+            if Organization.query.filter_by(name=data['name']).first():
+                return {'message': 'Organization name already exists'}, 409
+
+            # Check for duplicate slug
+            if Organization.query.filter_by(slug=data['slug']).first():
+                return {'message': 'Organization slug already exists'}, 409
+
+            # Create new organization
+            org = Organization(
+                name=data['name'],
+                slug=data['slug'],
+                plan=data.get('plan', 'free'),
+                is_active=data.get('is_active', True)
+            )
+
+            db.session.add(org)
+            db.session.commit()
+
+            return org.to_dict(), 201
 
     @orgs_ns.route('/<int:id>')
     @orgs_ns.param('id', 'Organization identifier')
@@ -367,10 +388,10 @@ def create_app():
             """
             Get organization by ID.
 
-            TODO: Get single organization.
+            Get single organization.
             """
-            # TODO: Implement GET /organizations/<id>
-            pass
+            org = Organization.query.get_or_404(id)
+            return org.to_dict()
 
     @orgs_ns.route('/<int:id>/users')
     @orgs_ns.param('id', 'Organization identifier')
@@ -384,7 +405,7 @@ def create_app():
             """
             Get all users in this organization.
 
-            TODO: This is TENANT-SCOPED querying!
+            This is TENANT-SCOPED querying!
 
             APPROACH 1 - Use relationship:
                 org = Organization.query.get_or_404(id)
@@ -395,10 +416,11 @@ def create_app():
 
             Both work, but Approach 1 is cleaner.
             """
-            # TODO: Implement GET /organizations/<id>/users
-            # HINT: Verify organization exists first
-            # HINT: Return organization.users
-            pass
+            # Verify organization exists first
+            org = Organization.query.get_or_404(id)
+
+            # Return all users in this organization
+            return [user.to_dict() for user in org.users]
 
     @orgs_ns.route('/<int:id>/posts')
     @orgs_ns.param('id', 'Organization identifier')
@@ -412,13 +434,19 @@ def create_app():
             """
             Get all posts in this organization.
 
-            TODO: Similar to OrganizationUsers, but for posts.
+            Similar to OrganizationUsers, but for posts.
 
             BONUS: Use eager loading to include author info!
             Post.query.filter_by(organization_id=id).options(joinedload(Post.author)).all()
             """
-            # TODO: Implement GET /organizations/<id>/posts
-            pass
+            # Verify organization exists first
+            org = Organization.query.get_or_404(id)
+
+            # Use eager loading to prevent N+1 queries
+            posts = Post.query.filter_by(organization_id=id).options(joinedload(Post.author)).all()
+
+            # Return all posts in this organization with author info
+            return [post.to_dict(include_author=True) for post in posts]
 
     # ============================================================================
     # MODIFIED ENDPOINTS (now with organization awareness)

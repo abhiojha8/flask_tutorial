@@ -67,7 +67,7 @@ class User(db.Model):
     """
     User model (from Exercise 3).
 
-    TODO (in Part 3): Add these columns via migration:
+    NEW (in Part 3): Added bio and avatar_url columns via migration:
     - bio: db.Column(db.Text, nullable=True)
     - avatar_url: db.Column(db.String(255), nullable=True)
     """
@@ -77,6 +77,8 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     full_name = db.Column(db.String(100), nullable=True)
+    bio = db.Column(db.Text, nullable=True)
+    avatar_url = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -90,7 +92,7 @@ class Post(db.Model):
     """
     Post model (from Exercise 3).
 
-    TODO (in Part 4): Add this column via migration:
+    NEW (in Part 4): Added category_id column via migration:
     - category_id: db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     """
     __tablename__ = 'posts'
@@ -98,6 +100,7 @@ class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default='draft')
@@ -106,19 +109,19 @@ class Post(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-# TODO (in Part 4): Add Category model
-# class Category(db.Model):
-#     """Category model for organizing posts."""
-#     __tablename__ = 'categories'
-#
-#     id = db.Column(db.Integer, primary_key=True)
-#     name = db.Column(db.String(50), unique=True, nullable=False)
-#     slug = db.Column(db.String(50), unique=True, nullable=False)
-#     description = db.Column(db.Text, nullable=True)
-#     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-#
-#     # Relationship to posts
-#     posts = db.relationship('Post', backref='category', lazy=True)
+# NEW (in Part 4): Category model added
+class Category(db.Model):
+    """Category model for organizing posts."""
+    __tablename__ = 'categories'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    slug = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationship to posts
+    posts = db.relationship('Post', backref='category', lazy=True)
 
 
 if __name__ == '__main__':
