@@ -1,0 +1,6 @@
+# Chapter 1 Demo Requirements
+Flask==3.0.0
+flask-restx==1.3.0
+Flask-CORS==4.0.0
+python-dotenv==1.0.0
+Werkzeug==3.0.1
