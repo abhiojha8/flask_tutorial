@@ -126,13 +126,13 @@ def create_app():
         # HINT: username and email should have unique=True
         # HINT: created_at and updated_at should use datetime.utcnow as default
 
-        id = None  # TODO: Replace with db.Column(db.Integer, primary_key=True)
-        username = None  # TODO: Replace with db.Column(db.String(80), unique=True, nullable=False)
-        email = None  # TODO: Replace with db.Column(db.String(120), unique=True, nullable=False)
-        full_name = None  # TODO: Replace with db.Column(db.String(100), nullable=True)
-        is_active = None  # TODO: Replace with db.Column(db.Boolean, default=True)
-        created_at = None  # TODO: Replace with db.Column(db.DateTime, default=datetime.utcnow)
-        updated_at = None  # TODO: Replace with db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        id = db.Column(db.Integer, primary_key=True)
+        username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+        email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+        full_name = db.Column(db.String(100), nullable=True)
+        is_active = db.Column(db.Boolean, default=True)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
         def to_dict(self):
             """
@@ -141,9 +141,15 @@ def create_app():
             WHY? SQLAlchemy objects can't be directly converted to JSON.
             We need to manually extract the data we want to return.
             """
-            # TODO: Return a dictionary with all user fields
-            # HINT: Format datetime fields as ISO strings: .isoformat() if not None
-            pass
+            return {
+                'id': self.id,
+                'username': self.username,
+                'email': self.email,
+                'full_name': self.full_name,
+                'is_active': self.is_active,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
 
     # ============================================================================
     # CREATE TABLES
@@ -152,10 +158,8 @@ def create_app():
     # Create all tables in the database
     # This runs when the app starts
     with app.app_context():
-        # TODO: Create all tables
-        # HINT: Use db.create_all()
-        pass
-        print("✅ Database tables created successfully!")
+        db.create_all()
+        print("[OK] Database tables created successfully!")
 
     # ============================================================================
     # API MODELS (for Swagger documentation)
@@ -193,17 +197,9 @@ def create_app():
         @users_ns.doc('list_users')
         @users_ns.marshal_list_with(user_output_model)
         def get(self):
-            """
-            List all users.
-
-            TODO: Query all users from database and return as list.
-            """
-            # TODO: Implement GET /users
-            # HINT: Use User.query.all() to get all users
-            # HINT: Convert each user to dict using to_dict()
-            # HINT: Return list of dictionaries
-
-            pass
+            """List all users"""
+            users = User.query.all()
+            return [user.to_dict() for user in users]
 
         @users_ns.doc('create_user')
         @users_ns.expect(user_input_model)
@@ -211,28 +207,29 @@ def create_app():
         @users_ns.response(400, 'Validation Error')
         @users_ns.response(409, 'User already exists (duplicate username/email)')
         def post(self):
-            """
-            Create a new user.
+            """Create a new user"""
+            data = request.json
 
-            TODO: Create user in database with validation.
+            # Check for duplicate username
+            if User.query.filter_by(username=data['username']).first():
+                return {'message': 'Username already exists'}, 409
 
-            STEPS:
-            1. Get JSON data from request
-            2. Validate required fields
-            3. Check for duplicate username/email
-            4. Create new User object
-            5. Add to session and commit
-            6. Return created user with 201 status
-            """
-            # TODO: Implement POST /users
-            # HINT: data = request.json
-            # HINT: Check if username or email already exists
-            # HINT: Create: user = User(username=..., email=...)
-            # HINT: Add to session: db.session.add(user)
-            # HINT: Commit: db.session.commit()
-            # HINT: Handle IntegrityError for duplicate email/username
+            # Check for duplicate email
+            if User.query.filter_by(email=data['email']).first():
+                return {'message': 'Email already exists'}, 409
 
-            pass
+            # Create new user
+            user = User(
+                username=data['username'],
+                email=data['email'],
+                full_name=data.get('full_name'),
+                is_active=data.get('is_active', True)
+            )
+
+            db.session.add(user)
+            db.session.commit()
+
+            return user.to_dict(), 201
 
     @users_ns.route('/<int:id>')
     @users_ns.param('id', 'User identifier')
@@ -243,16 +240,9 @@ def create_app():
         @users_ns.marshal_with(user_output_model)
         @users_ns.response(404, 'User not found')
         def get(self, id):
-            """
-            Get user by ID.
-
-            TODO: Find user by ID and return, or 404 if not found.
-            """
-            # TODO: Implement GET /users/<id>
-            # HINT: Use User.query.get(id) or User.query.get_or_404(id)
-            # HINT: Return user.to_dict()
-
-            pass
+            """Get user by ID"""
+            user = User.query.get_or_404(id)
+            return user.to_dict()
 
         @users_ns.doc('update_user')
         @users_ns.expect(user_input_model)
@@ -260,38 +250,42 @@ def create_app():
         @users_ns.response(404, 'User not found')
         @users_ns.response(409, 'Duplicate username/email')
         def put(self, id):
-            """
-            Update user.
+            """Update user"""
+            user = User.query.get_or_404(id)
+            data = request.json
 
-            TODO: Update user fields and save to database.
+            # Check for duplicate username (excluding current user)
+            if 'username' in data and data['username'] != user.username:
+                if User.query.filter_by(username=data['username']).first():
+                    return {'message': 'Username already exists'}, 409
 
-            IMPORTANT: Check for duplicate username/email from OTHER users!
-            """
-            # TODO: Implement PUT /users/<id>
-            # HINT: Get user by ID first
-            # HINT: Update fields from request.json
-            # HINT: Check for duplicates (excluding current user)
-            # HINT: db.session.commit() to save changes
-            # HINT: updated_at will auto-update because of onupdate=datetime.utcnow
+            # Check for duplicate email (excluding current user)
+            if 'email' in data and data['email'] != user.email:
+                if User.query.filter_by(email=data['email']).first():
+                    return {'message': 'Email already exists'}, 409
 
-            pass
+            # Update fields
+            if 'username' in data:
+                user.username = data['username']
+            if 'email' in data:
+                user.email = data['email']
+            if 'full_name' in data:
+                user.full_name = data['full_name']
+            if 'is_active' in data:
+                user.is_active = data['is_active']
+
+            db.session.commit()
+            return user.to_dict()
 
         @users_ns.doc('delete_user')
         @users_ns.response(204, 'User deleted successfully')
         @users_ns.response(404, 'User not found')
         def delete(self, id):
-            """
-            Delete user.
-
-            TODO: Remove user from database.
-            """
-            # TODO: Implement DELETE /users/<id>
-            # HINT: Get user by ID
-            # HINT: db.session.delete(user)
-            # HINT: db.session.commit()
-            # HINT: Return empty response with 204 status
-
-            pass
+            """Delete user"""
+            user = User.query.get_or_404(id)
+            db.session.delete(user)
+            db.session.commit()
+            return '', 204
 
     # ============================================================================
     # REGISTER NAMESPACE

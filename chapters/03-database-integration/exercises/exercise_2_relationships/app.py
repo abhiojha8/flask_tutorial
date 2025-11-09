@@ -131,18 +131,8 @@ def create_app():
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        # TODO: Add relationship to posts
-        # HINT: posts = db.relationship('Post', backref='author', lazy=True, cascade='all, delete-orphan')
-        #
-        # WHAT THIS MEANS:
-        # - 'Post': The related model
-        # - backref='author': Creates Post.author to access the user
-        # - lazy=True: Load posts only when accessed (lazy loading)
-        # - cascade='all, delete-orphan': When user is deleted, delete their posts too
-        #
-        # AFTER THIS, YOU CAN DO:
-        # user.posts → Get all posts by this user
-        # post.author → Get the user who wrote this post
+        # Relationship: One user has many posts
+        posts = db.relationship('Post', backref='author', lazy=True, cascade='all, delete-orphan')
 
         def to_dict(self):
             """Convert User to dictionary."""
@@ -168,19 +158,14 @@ def create_app():
         """
         __tablename__ = 'posts'
 
-        # TODO: Define all columns
-        # HINT: user_id should be db.ForeignKey('users.id'), nullable=False
-        # HINT: status should have a default value of 'draft'
-        # HINT: view_count should have a default value of 0
-
-        id = None  # TODO: db.Column(db.Integer, primary_key=True)
-        user_id = None  # TODO: db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-        title = None  # TODO: db.Column(db.String(200), nullable=False)
-        content = None  # TODO: db.Column(db.Text, nullable=True)
-        status = None  # TODO: db.Column(db.String(20), default='draft')
-        view_count = None  # TODO: db.Column(db.Integer, default=0)
-        created_at = None  # TODO: db.Column(db.DateTime, default=datetime.utcnow)
-        updated_at = None  # TODO: db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+        title = db.Column(db.String(200), nullable=False)
+        content = db.Column(db.Text, nullable=True)
+        status = db.Column(db.String(20), default='draft')
+        view_count = db.Column(db.Integer, default=0)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
         def to_dict(self, include_author=False):
             """
@@ -192,11 +177,21 @@ def create_app():
             Args:
                 include_author: If True, includes author details in the response
             """
-            # TODO: Return dictionary with all post fields
-            # HINT: If include_author is True, add 'author': self.author.to_dict()
-            # HINT: This uses the 'author' backref created by the relationship
-            # HINT: Format datetime fields as ISO strings
-            pass
+            result = {
+                'id': self.id,
+                'user_id': self.user_id,
+                'title': self.title,
+                'content': self.content,
+                'status': self.status,
+                'view_count': self.view_count,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
+
+            if include_author:
+                result['author'] = self.author.to_dict()
+
+            return result
 
     # ============================================================================
     # CREATE TABLES
@@ -204,7 +199,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-        print("✅ Database tables created successfully!")
+        print("[OK] Database tables created successfully!")
         print("   - users table (from Exercise 1)")
         print("   - posts table (NEW with foreign key to users)")
 
@@ -275,10 +270,8 @@ def create_app():
             ✅ Good:
                 posts = Post.query.options(joinedload(Post.author)).all()  # 1 query with JOIN
             """
-            # TODO: Implement GET /posts
-            # HINT: Use Post.query.options(joinedload(Post.author)).all()
-            # HINT: Convert each post with to_dict(include_author=True)
-            pass
+            posts = Post.query.options(joinedload(Post.author)).all()
+            return [post.to_dict(include_author=True) for post in posts]
 
         @posts_ns.doc('create_post')
         @posts_ns.expect(post_input_model)
@@ -303,11 +296,26 @@ def create_app():
             5. Add and commit
             6. Return with author info
             """
-            # TODO: Implement POST /posts
-            # HINT: Check if user exists first: user = User.query.get(data['user_id'])
-            # HINT: If not user, return {'message': 'User not found'}, 404
-            # HINT: Create post: post = Post(title=..., user_id=..., ...)
-            pass
+            data = request.json
+
+            # Validate user exists
+            user = User.query.get(data['user_id'])
+            if not user:
+                return {'message': 'User not found'}, 404
+
+            # Create new post
+            post = Post(
+                user_id=data['user_id'],
+                title=data['title'],
+                content=data.get('content'),
+                status=data.get('status', 'draft'),
+                view_count=data.get('view_count', 0)
+            )
+
+            db.session.add(post)
+            db.session.commit()
+
+            return post.to_dict(include_author=True), 201
 
     @posts_ns.route('/<int:id>')
     @posts_ns.param('id', 'Post identifier')
@@ -323,10 +331,8 @@ def create_app():
 
             TODO: Get single post with eager loaded author.
             """
-            # TODO: Implement GET /posts/<id>
-            # HINT: Post.query.options(joinedload(Post.author)).get_or_404(id)
-            # HINT: Return post.to_dict(include_author=True)
-            pass
+            post = Post.query.options(joinedload(Post.author)).get_or_404(id)
+            return post.to_dict(include_author=True)
 
         @posts_ns.doc('update_post')
         @posts_ns.expect(post_input_model)
@@ -340,12 +346,28 @@ def create_app():
 
             NOTE: You can allow changing the user_id, but validate it exists!
             """
-            # TODO: Implement PUT /posts/<id>
-            # HINT: Get post by ID
-            # HINT: If changing user_id, validate new user exists
-            # HINT: Update fields from request.json
-            # HINT: db.session.commit()
-            pass
+            post = Post.query.get_or_404(id)
+            data = request.json
+
+            # If changing user_id, validate new user exists
+            if 'user_id' in data and data['user_id'] != post.user_id:
+                user = User.query.get(data['user_id'])
+                if not user:
+                    return {'message': 'User not found'}, 404
+                post.user_id = data['user_id']
+
+            # Update other fields
+            if 'title' in data:
+                post.title = data['title']
+            if 'content' in data:
+                post.content = data['content']
+            if 'status' in data:
+                post.status = data['status']
+            if 'view_count' in data:
+                post.view_count = data['view_count']
+
+            db.session.commit()
+            return post.to_dict(include_author=True)
 
         @posts_ns.doc('delete_post')
         @posts_ns.response(204, 'Post deleted')
@@ -356,9 +378,10 @@ def create_app():
 
             TODO: Remove post from database.
             """
-            # TODO: Implement DELETE /posts/<id>
-            # HINT: Similar to Exercise 1
-            pass
+            post = Post.query.get_or_404(id)
+            db.session.delete(post)
+            db.session.commit()
+            return '', 204
 
     # ============================================================================
     # NESTED RESOURCE: USER'S POSTS
@@ -389,11 +412,8 @@ def create_app():
 
             Both are valid. Approach 1 is more Pythonic.
             """
-            # TODO: Implement GET /users/<id>/posts
-            # HINT: First verify user exists
-            # HINT: Return user.posts (uses the relationship!)
-            # HINT: Convert each post to dict
-            pass
+            user = User.query.get_or_404(id)
+            return [post.to_dict() for post in user.posts]
 
     # ============================================================================
     # USER ENDPOINTS (from Exercise 1, kept for reference)
