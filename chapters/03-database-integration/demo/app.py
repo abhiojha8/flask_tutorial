@@ -311,7 +311,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-        print("✅ Database tables created successfully with all indexes!")
+        print("[OK] Database tables created successfully with all indexes!")
 
     # ============================================================================
     # API MODELS (for Swagger)
