@@ -1,6 +1,38 @@
-"""
-Flask API with comprehensive health check system
-Demonstrates production-ready health monitoring
+"""Flask API with comprehensive health check system.
+
+This module demonstrates production-ready health monitoring for Flask applications,
+implementing liveness, readiness, and comprehensive health checks. Essential for
+containerized deployments, load balancers, and orchestration systems like Kubernetes.
+
+Key Features:
+    - Liveness checks: Is the application running?
+    - Readiness checks: Can the application handle requests?
+    - Comprehensive health checks: Detailed status of all dependencies
+    - Database connectivity monitoring
+    - Redis/cache health checks
+    - Disk space and memory monitoring
+    - External service dependency checks
+
+Health Check Types:
+    - /health/live: Basic liveness probe (is app alive?)
+    - /health/ready: Readiness probe (is app ready for traffic?)
+    - /health/: Full health check with all components
+    - /health/status/<check_name>: Individual component check
+
+Example:
+    Run the application:
+        $ python app.py
+
+    Check application health:
+        $ curl http://localhost:5000/health/
+        $ curl http://localhost:5000/health/ready
+        $ curl http://localhost:5000/health/status/database
+
+Implementation Notes:
+    - Critical checks (database, redis) affect readiness status
+    - Non-critical checks (disk, memory) don't block traffic
+    - Health checks return 503 when unhealthy for load balancer integration
+    - Compatible with Kubernetes liveness and readiness probes
 """
 
 from flask import Flask
@@ -11,7 +43,32 @@ import os
 
 
 def create_app():
-    """Create Flask app with health checks"""
+    """Create and configure Flask application with health monitoring.
+
+    This factory function creates a Flask application with comprehensive health
+    check capabilities for production deployments. Includes monitoring for
+    databases, caches, system resources, and external dependencies.
+
+    Returns:
+        Flask: Configured Flask application with health check endpoints.
+
+    Configuration:
+        The app expects the following config values:
+        - DATABASE_URL: Database connection string
+        - REDIS_URL: Redis connection string
+        - DISK_SPACE_THRESHOLD_GB: Minimum free disk space (GB)
+        - HEALTH_CHECK_EXTERNAL_SERVICES: List of external services to monitor
+
+    Health Check Endpoints:
+        - GET /health/live: Liveness check (always returns 200 if app is running)
+        - GET /health/ready: Readiness check (503 if critical services are down)
+        - GET /health/: Comprehensive health status with details
+        - GET /health/status/<check>: Individual health check status
+
+    Example:
+        >>> app = create_app()
+        >>> app.run()
+    """
     app = Flask(__name__)
 
     # Configuration
@@ -53,7 +110,18 @@ def create_app():
 
     # Register custom health checks if needed
     def check_custom_service(app):
-        """Custom health check example"""
+        """Custom health check example.
+
+        Demonstrates how to add custom health checks for application-specific
+        dependencies or business logic validation.
+
+        Args:
+            app (Flask): The Flask application instance.
+
+        Returns:
+            dict: Health check result with status and details.
+                Must include 'status' key with value 'up', 'degraded', or 'down'.
+        """
         # Implement your custom check logic
         return {
             'status': 'up',

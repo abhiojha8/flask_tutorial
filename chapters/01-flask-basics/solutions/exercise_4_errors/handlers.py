@@ -1,6 +1,40 @@
-"""
-Global error handlers for Flask API
-Provides consistent error responses across the application
+"""Global error handlers for Flask API.
+
+This module provides comprehensive global error handling for Flask applications,
+ensuring consistent error responses across all endpoints. Handles both custom
+API exceptions and standard Python/Flask exceptions.
+
+Features:
+    - Consistent JSON error response format
+    - Request ID tracking for debugging
+    - Appropriate HTTP status codes
+    - Detailed error logging
+    - Security-conscious error messages (no stack traces in production)
+    - Special handling for validation, HTTP, and Python exceptions
+
+Error Response Format:
+    All errors return JSON in this format:
+    {
+        "error": {
+            "code": "ERROR_CODE",
+            "message": "Human-readable message",
+            "details": {...},
+            "request_id": "uuid",
+            "timestamp": "2024-01-01T12:00:00Z",
+            "path": "/api/endpoint",
+            "method": "GET"
+        }
+    }
+
+Example:
+    Register error handlers in your app:
+        >>> from handlers import register_error_handlers
+        >>> app = Flask(__name__)
+        >>> register_error_handlers(app)
+
+    Errors are now automatically formatted:
+        >>> raise NotFoundError(resource='User', resource_id=123)
+        # Returns: {"error": {"code": "NOT_FOUND", ...}}
 """
 
 import logging
@@ -15,16 +49,47 @@ logger = logging.getLogger(__name__)
 
 
 def get_request_id():
-    """Get request ID from context"""
+    """Get request ID from Flask's g object.
+
+    Returns:
+        str: The request ID for the current request, or 'no-request-id' if not set.
+    """
     return g.get('request_id', 'no-request-id')
 
 
 def register_error_handlers(app):
-    """Register all error handlers with Flask app"""
+    """Register all global error handlers with Flask application.
+
+    Registers handlers for:
+        - Custom API exceptions (APIException and subclasses)
+        - Marshmallow validation errors
+        - Werkzeug HTTP exceptions
+        - Python built-in exceptions (ValueError, KeyError, TypeError)
+        - Generic catch-all for unexpected errors
+
+    Args:
+        app (Flask): The Flask application instance.
+
+    Implementation Notes:
+        - Handlers are registered in order of specificity
+        - Each handler logs the error with appropriate log level
+        - Production mode hides internal error details
+        - Request ID is included in all error responses
+    """
 
     @app.errorhandler(APIException)
     def handle_api_exception(error):
-        """Handle custom API exceptions"""
+        """Handle custom API exceptions.
+
+        Args:
+            error (APIException): The API exception that was raised.
+
+        Returns:
+            tuple: (JSON response, HTTP status code)
+
+        Logs:
+            ERROR level with exception details and request context
+        """
         logger.error(
             f"API Exception: {error.code} - {error.message}",
             extra={
@@ -44,7 +109,19 @@ def register_error_handlers(app):
 
     @app.errorhandler(MarshmallowValidationError)
     def handle_marshmallow_validation_error(error):
-        """Handle Marshmallow validation errors"""
+        """Handle Marshmallow validation errors.
+
+        Converts Marshmallow validation errors to standard API error format.
+
+        Args:
+            error (MarshmallowValidationError): Marshmallow validation exception.
+
+        Returns:
+            tuple: (JSON response, 400 status code)
+
+        Logs:
+            WARNING level with validation error details
+        """
         logger.warning(
             "Validation error",
             extra={
@@ -72,7 +149,20 @@ def register_error_handlers(app):
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(error):
-        """Handle Werkzeug HTTP exceptions"""
+        """Handle Werkzeug HTTP exceptions.
+
+        Handles standard HTTP exceptions like 404, 405, 413, etc. raised by
+        Flask/Werkzeug when no custom exception is thrown.
+
+        Args:
+            error (HTTPException): Werkzeug HTTP exception.
+
+        Returns:
+            tuple: (JSON response, original HTTP status code)
+
+        Logs:
+            ERROR level with status code and request context
+        """
         logger.error(
             f"HTTP Exception: {error.code} - {error.description}",
             extra={
@@ -117,7 +207,20 @@ def register_error_handlers(app):
 
     @app.errorhandler(ValueError)
     def handle_value_error(error):
-        """Handle ValueError exceptions"""
+        """Handle Python ValueError exceptions.
+
+        Catches ValueErrors (e.g., invalid type conversions) and converts
+        them to API error responses.
+
+        Args:
+            error (ValueError): The ValueError that was raised.
+
+        Returns:
+            tuple: (JSON response, 400 status code)
+
+        Logs:
+            ERROR level with full stack trace
+        """
         logger.error(
             f"Value error: {str(error)}",
             exc_info=True,
@@ -140,7 +243,20 @@ def register_error_handlers(app):
 
     @app.errorhandler(KeyError)
     def handle_key_error(error):
-        """Handle KeyError exceptions"""
+        """Handle Python KeyError exceptions.
+
+        Catches KeyErrors (accessing missing dictionary keys) and converts
+        them to API error responses.
+
+        Args:
+            error (KeyError): The KeyError that was raised.
+
+        Returns:
+            tuple: (JSON response, 400 status code)
+
+        Logs:
+            ERROR level with full stack trace
+        """
         logger.error(
             f"Key error: {str(error)}",
             exc_info=True,
@@ -165,7 +281,20 @@ def register_error_handlers(app):
 
     @app.errorhandler(TypeError)
     def handle_type_error(error):
-        """Handle TypeError exceptions"""
+        """Handle Python TypeError exceptions.
+
+        Catches TypeErrors (e.g., calling function with wrong types) and
+        converts them to API error responses.
+
+        Args:
+            error (TypeError): The TypeError that was raised.
+
+        Returns:
+            tuple: (JSON response, 400 status code)
+
+        Logs:
+            ERROR level with full stack trace
+        """
         logger.error(
             f"Type error: {str(error)}",
             exc_info=True,
@@ -190,7 +319,19 @@ def register_error_handlers(app):
 
     @app.errorhandler(404)
     def handle_404(error):
-        """Handle 404 Not Found"""
+        """Handle 404 Not Found errors.
+
+        Catches requests to non-existent endpoints.
+
+        Args:
+            error: The 404 error object.
+
+        Returns:
+            tuple: (JSON response, 404 status code)
+
+        Logs:
+            WARNING level (404s are common and not critical)
+        """
         logger.warning(
             f"404 Not Found: {request.path}",
             extra={'request_id': get_request_id()}
@@ -213,7 +354,19 @@ def register_error_handlers(app):
 
     @app.errorhandler(405)
     def handle_405(error):
-        """Handle 405 Method Not Allowed"""
+        """Handle 405 Method Not Allowed errors.
+
+        Catches requests using unsupported HTTP methods.
+
+        Args:
+            error: The 405 error object.
+
+        Returns:
+            tuple: (JSON response, 405 status code)
+
+        Logs:
+            WARNING level
+        """
         logger.warning(
             f"405 Method Not Allowed: {request.method} {request.path}",
             extra={'request_id': get_request_id()}
@@ -236,7 +389,24 @@ def register_error_handlers(app):
 
     @app.errorhandler(500)
     def handle_500(error):
-        """Handle 500 Internal Server Error"""
+        """Handle 500 Internal Server Error.
+
+        Catches unhandled server errors. In production, hides error details
+        for security.
+
+        Args:
+            error: The 500 error object.
+
+        Returns:
+            tuple: (JSON response, 500 status code)
+
+        Logs:
+            ERROR level with full stack trace
+
+        Security:
+            - DEBUG mode: Full error message visible
+            - Production: Generic error message only
+        """
         logger.error(
             f"500 Internal Server Error: {str(error)}",
             exc_info=True,
@@ -265,7 +435,24 @@ def register_error_handlers(app):
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(error):
-        """Handle all unexpected exceptions"""
+        """Handle all unexpected exceptions (catch-all handler).
+
+        This is the last resort handler for any exception not caught by
+        more specific handlers.
+
+        Args:
+            error (Exception): Any Python exception.
+
+        Returns:
+            tuple: (JSON response, 500 status code)
+
+        Logs:
+            ERROR level with exception type and full stack trace
+
+        Security:
+            - DEBUG mode: Full error details including exception type
+            - Production: Generic error message only
+        """
         logger.error(
             f"Unexpected error: {str(error)}",
             exc_info=True,

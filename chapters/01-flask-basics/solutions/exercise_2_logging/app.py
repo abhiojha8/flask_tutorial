@@ -1,6 +1,29 @@
-"""
-Flask API with JSON-formatted structured logging
-Demonstrates comprehensive logging with request tracking
+"""Flask API with JSON-formatted structured logging.
+
+This module demonstrates comprehensive structured logging in a Flask application using
+JSON-formatted logs for better observability and monitoring. It showcases various logging
+patterns including request tracking, performance monitoring, audit logging, and business
+event logging.
+
+Key Features:
+    - JSON-formatted structured logging for machine-readable logs
+    - Request ID tracking across the application lifecycle
+    - Performance monitoring with custom metrics
+    - Audit logging for security and compliance
+    - Database query and external API call logging
+    - Automatic slow request detection
+
+The application uses Flask-RESTX for API documentation and implements multiple middleware
+components for comprehensive logging coverage.
+
+Example:
+    Run the application:
+        $ python app.py
+
+    Access the API:
+        $ curl http://localhost:5000/api/v1/demo/tasks
+
+    View logs in logs/app.log with JSON-formatted entries
 """
 
 from flask import Flask, jsonify, request, g
@@ -13,7 +36,32 @@ from middleware import LoggingMiddleware, PerformanceMonitor, AuditLogger
 
 
 def create_app():
-    """Create Flask app with structured logging"""
+    """Create and configure Flask application with structured logging.
+
+    This factory function creates a Flask application instance with comprehensive
+    logging configuration including JSON formatting, request tracking, performance
+    monitoring, and audit logging capabilities.
+
+    The function sets up:
+        - JSON-formatted logging to both console and file
+        - Request ID middleware for distributed tracing
+        - Performance monitoring middleware
+        - Audit logging middleware
+        - Flask-RESTX API documentation
+        - CORS support
+        - Demo endpoints showcasing various logging patterns
+
+    Returns:
+        Flask: Configured Flask application instance with logging middleware
+            and demo endpoints.
+
+    Implementation Notes:
+        - All logs are written in JSON format for better parsing and analysis
+        - Request IDs are automatically generated and tracked
+        - Performance metrics are collected for database queries and external APIs
+        - Slow requests (>1s) are automatically logged as warnings
+        - Audit logs capture authentication, authorization, and data access events
+    """
     app = Flask(__name__)
 
     # Basic configuration
@@ -62,7 +110,22 @@ def create_app():
         @demo_ns.doc('list_tasks')
         @demo_ns.marshal_list_with(task_model)
         def get(self):
-            """List all tasks with logging"""
+            """List all tasks with comprehensive logging demonstration.
+
+            This endpoint demonstrates various logging patterns including:
+            - API call logging with context
+            - Database query performance logging
+            - Cache hit/miss logging
+            - Simulated latency tracking
+
+            Returns:
+                list: List of task dictionaries with id, title, and completed fields.
+
+            Logs Generated:
+                - INFO: API call with task count
+                - DEBUG: Database query execution with timing
+                - DEBUG: Cache hit/miss status
+            """
             # Log API call
             api_logger.log_api_call('/tasks', 'GET', count=len(tasks))
 
@@ -86,7 +149,18 @@ def create_app():
         @demo_ns.expect(task_model)
         @demo_ns.marshal_with(task_model, code=201)
         def post(self):
-            """Create a task with audit logging"""
+            """Create a task with audit logging demonstration.
+
+            Demonstrates business event logging and audit logging patterns
+            for tracking important operations and data access.
+
+            Returns:
+                tuple: (task dict, 201 status code) for the created task.
+
+            Logs Generated:
+                - INFO: Business event for task creation
+                - INFO: Audit log for data access (create operation)
+            """
             new_task = {
                 'id': len(tasks) + 1,
                 'title': api.payload.get('title'),
@@ -115,7 +189,20 @@ def create_app():
     class SlowEndpoint(Resource):
         @demo_ns.doc('slow_operation')
         def get(self):
-            """Simulate a slow operation"""
+            """Simulate a slow operation to demonstrate performance logging.
+
+            This endpoint intentionally delays the response to trigger slow
+            request warnings in the logging middleware. Useful for testing
+            performance monitoring and alerting.
+
+            Returns:
+                dict: Message with the delay duration.
+
+            Logs Generated:
+                - INFO: Operation start
+                - INFO: Operation completion with duration
+                - WARNING: Slow request alert (automatically by middleware)
+            """
             logger.info("Starting slow operation")
 
             # Simulate slow processing
@@ -130,7 +217,21 @@ def create_app():
     class ErrorEndpoint(Resource):
         @demo_ns.doc('trigger_error')
         def get(self):
-            """Trigger an error for logging demonstration"""
+            """Trigger an error for logging demonstration.
+
+            Demonstrates error logging with full stack traces and contextual
+            information. Shows how exceptions are captured and logged.
+
+            Returns:
+                Never returns - always raises an exception.
+
+            Raises:
+                ZeroDivisionError: Intentionally raised for demonstration.
+
+            Logs Generated:
+                - WARNING: Pre-error notification
+                - ERROR: Exception with full stack trace
+            """
             logger.warning("About to trigger an intentional error")
 
             try:
@@ -148,7 +249,18 @@ def create_app():
     class ExternalAPIEndpoint(Resource):
         @demo_ns.doc('external_api_call')
         def get(self):
-            """Simulate external API call"""
+            """Simulate external API call with performance tracking.
+
+            Demonstrates logging of external service interactions including
+            timing, status codes, and correlation for distributed tracing.
+
+            Returns:
+                dict: Service response details with timing information.
+
+            Logs Generated:
+                - INFO: External API call with service details, status, and timing
+                - Performance metric recorded for monitoring
+            """
             service = 'payment-gateway'
             endpoint = '/api/process'
 
@@ -177,7 +289,20 @@ def create_app():
     class AuthEndpoint(Resource):
         @demo_ns.doc('auth_demo')
         def post(self):
-            """Simulate authentication for audit logging"""
+            """Simulate authentication for audit logging demonstration.
+
+            Demonstrates security audit logging for authentication attempts
+            and authorization decisions. Critical for compliance and security
+            monitoring.
+
+            Returns:
+                dict: Authentication status and user information.
+                Status code 401 if authentication fails.
+
+            Logs Generated:
+                - INFO: Authentication attempt result (success/failure)
+                - INFO: Authorization check result (if authenticated)
+            """
             username = request.json.get('username', 'demo-user')
             success = random.choice([True, True, False])
 
@@ -204,7 +329,14 @@ def create_app():
     class LogSummary(Resource):
         @metrics_ns.doc('log_summary')
         def get(self):
-            """Get logging statistics"""
+            """Get logging configuration and statistics.
+
+            Returns current logging system configuration including request ID,
+            environment, log level, and handler information.
+
+            Returns:
+                dict: Logging system metadata and statistics.
+            """
             return {
                 'request_id': get_request_id(),
                 'environment': app.config.get('ENV'),
@@ -216,7 +348,15 @@ def create_app():
     class PerformanceMetrics(Resource):
         @metrics_ns.doc('performance_metrics')
         def get(self):
-            """Get performance metrics"""
+            """Get collected performance metrics and statistics.
+
+            Returns aggregated performance data for various operations including
+            database queries, external API calls, and cache operations.
+
+            Returns:
+                dict: Performance metrics with min, max, avg, and recent values
+                    for each tracked operation type.
+            """
             perf_monitor.log_summary()
 
             metrics = {}

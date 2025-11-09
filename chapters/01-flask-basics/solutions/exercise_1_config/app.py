@@ -22,7 +22,32 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(config_name=None):
-    """Application factory with environment-based configuration"""
+    """
+    Application factory with environment-based configuration.
+
+    Creates and configures a Flask application using the factory pattern,
+    allowing for different configurations based on the environment.
+
+    Args:
+        config_name (str, optional): The configuration environment to use.
+            Options: 'development', 'testing', 'staging', 'production'.
+            Defaults to None, which will auto-detect from environment.
+
+    Returns:
+        Flask: Configured Flask application instance with:
+            - Environment-specific configuration loaded
+            - CORS enabled with configured origins
+            - Flask-RESTX API with Swagger UI
+            - Configuration and health check endpoints
+
+    Example:
+        >>> app = create_app('development')
+        >>> app.config['DEBUG']
+        True
+        >>> app = create_app('production')
+        >>> app.config['DEBUG']
+        False
+    """
     app = Flask(__name__)
 
     # Load configuration
@@ -54,9 +79,32 @@ def create_app(config_name=None):
 
     @config_ns.route('/info')
     class ConfigInfo(Resource):
+        """
+        Configuration information endpoint.
+
+        Provides safe configuration values that can be exposed to clients
+        without security risks.
+        """
+
         @config_ns.doc('get_config_info')
         def get(self):
-            """Get current configuration information (safe values only)"""
+            """
+            Get current configuration information (safe values only).
+
+            Returns non-sensitive configuration values including environment,
+            feature flags, and system limits. Sensitive values like SECRET_KEY
+            and DATABASE_URL are never exposed.
+
+            Returns:
+                dict: Configuration information containing:
+                    - environment: Current environment name
+                    - app_name: Application name
+                    - api_version: API version
+                    - debug: Debug mode status
+                    - testing: Testing mode status
+                    - features: Dictionary of feature flags
+                    - limits: System limits and constraints
+            """
             return {
                 'environment': app.config.get('ENV', 'unknown'),
                 'app_name': app.config.get('APP_NAME'),
@@ -147,7 +195,29 @@ def create_app(config_name=None):
 
 
 def run_app():
-    """Run the application with environment detection"""
+    """
+    Run the application with environment detection.
+
+    Detects the environment from the FLASK_ENV environment variable
+    and starts the Flask application with the appropriate configuration.
+    Defaults to 'development' if FLASK_ENV is not set.
+
+    The function will:
+    1. Check FLASK_ENV environment variable
+    2. Create app with detected environment config
+    3. Start the development server on port 5000
+
+    Environment Variables:
+        FLASK_ENV: Sets the configuration environment
+            - development: Debug mode enabled, verbose logging
+            - testing: Testing configuration, in-memory database
+            - staging: Production-like with debug features
+            - production: Full production configuration
+
+    Note:
+        This uses Flask's built-in development server. For production,
+        use a WSGI server like Gunicorn or uWSGI instead.
+    """
     import os
 
     # Detect environment from FLASK_ENV or default to development

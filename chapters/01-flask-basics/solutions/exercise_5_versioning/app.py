@@ -1,6 +1,55 @@
-"""
-Flask API with comprehensive versioning system
-Supports URL-based and header-based versioning
+"""Flask API with comprehensive versioning system.
+
+This module demonstrates production-ready API versioning strategies for Flask
+applications, supporting both URL-based and header-based versioning. Essential
+for maintaining backward compatibility while evolving your API.
+
+Versioning Strategies:
+    1. URL-based: /api/v1/tasks, /api/v2/tasks
+    2. Header-based: API-Version: v2 or API-Version: 2.0
+
+Version Lifecycle:
+    - v1 (Deprecated): Legacy version, will be removed on sunset date
+    - v2 (Current): Current stable version, recommended for production use
+    - v3 (Beta): Next generation with breaking changes, for early adopters
+
+Key Features:
+    - Multiple concurrent API versions
+    - Deprecation warnings with sunset dates
+    - Version information endpoint
+    - Migration guides between versions
+    - Backward compatibility support
+    - Separate Swagger documentation per version
+
+Breaking Changes Between Versions:
+    v1 -> v2:
+        - Field "name" renamed to "title"
+        - Field "done" renamed to "completed"
+        - Added "priority" field
+        - Added timestamp fields
+
+    v2 -> v3:
+        - Task ID changed from integer to UUID string
+        - Priority changed from string to integer (1-5)
+        - Status expanded from boolean to enum
+        - Added nested assignee object
+
+Example:
+    URL-based versioning:
+        $ curl http://localhost:5000/api/v2/tasks/
+
+    Header-based versioning:
+        $ curl -H "API-Version: v2" http://localhost:5000/api/tasks/
+
+    Check version info:
+        $ curl http://localhost:5000/api/versions
+
+Best Practices:
+    - Use semantic versioning (v1, v2, v3)
+    - Maintain at least 2 versions simultaneously
+    - Announce deprecations well in advance
+    - Provide migration guides and tools
+    - Never break existing versions without notice
 """
 
 from flask import Flask, request, g, jsonify
@@ -11,7 +60,40 @@ import warnings
 
 
 def create_app():
-    """Create Flask app with API versioning"""
+    """Create and configure Flask application with API versioning.
+
+    This factory function creates a Flask application with comprehensive API
+    versioning support including URL-based and header-based version detection,
+    deprecation warnings, and separate documentation per version.
+
+    Returns:
+        Flask: Configured Flask application with multiple API versions.
+
+    Version Configuration:
+        API_VERSIONS: List of all supported versions ['v1', 'v2', 'v3']
+        DEFAULT_API_VERSION: Default when no version specified ('v2')
+        DEPRECATED_VERSIONS: Versions marked for removal (['v1'])
+        VERSION_SUNSET_DATES: Removal dates for deprecated versions
+
+    Endpoints:
+        - /api/v1/*: Version 1 endpoints (deprecated)
+        - /api/v2/*: Version 2 endpoints (current)
+        - /api/v3/*: Version 3 endpoints (beta)
+        - /api/versions: Version information
+        - /api/migrate: Migration guide between versions
+
+    Response Headers:
+        - X-API-Version: Current API version used
+        - X-API-Deprecation: 'true' if using deprecated version
+        - X-API-Deprecation-Date: Sunset date for deprecated version
+        - Warning: Deprecation warning message (RFC 7234)
+
+    Implementation Notes:
+        - Version is detected from URL first, then headers
+        - Deprecation warnings are automatically added to responses
+        - Each version has separate Swagger documentation
+        - Backward compatibility is maintained within major versions
+    """
     app = Flask(__name__)
 
     # Configuration
@@ -30,7 +112,21 @@ def create_app():
     # Version detection middleware
     @app.before_request
     def detect_api_version():
-        """Detect API version from URL or header"""
+        """Detect and set API version from URL or header.
+
+        Version detection priority:
+            1. URL path (e.g., /api/v2/tasks)
+            2. API-Version header (e.g., "v2" or "2.0")
+            3. Default version from config
+
+        Side Effects:
+            Sets g.api_version for use throughout the request lifecycle.
+
+        Header Format:
+            - "v1", "v2", "v3" (preferred)
+            - "1.0", "2.0", "3.0" (major version extracted)
+            - "1", "2", "3" (converted to v1, v2, v3)
+        """
         # Try URL-based version first
         if request.path.startswith('/api/'):
             path_parts = request.path.split('/')
@@ -56,7 +152,25 @@ def create_app():
 
     @app.after_request
     def add_version_headers(response):
-        """Add API version information to response headers"""
+        """Add API version information and deprecation warnings to response headers.
+
+        Args:
+            response (flask.Response): The response object being returned.
+
+        Returns:
+            flask.Response: Response with added version headers.
+
+        Headers Added:
+            - X-API-Version: Current version used (e.g., "v2")
+            - X-API-Deprecation: "true" if version is deprecated
+            - X-API-Deprecation-Date: Sunset date (ISO 8601)
+            - Warning: RFC 7234 warning for deprecated versions
+
+        Implementation Notes:
+            - Deprecation warnings help clients migrate proactively
+            - Sunset dates give clear timeline for migration
+            - Warning header is standard HTTP (RFC 7234)
+        """
         response.headers['X-API-Version'] = g.get('api_version', 'unknown')
 
         # Add deprecation warning for old versions
@@ -110,7 +224,17 @@ def create_app():
         @tasks_v1.doc('list_tasks')
         @tasks_v1.marshal_list_with(task_model_v1)
         def get(self):
-            """List all tasks (v1 format)"""
+            """List all tasks in v1 format (DEPRECATED).
+
+            Legacy endpoint using old field names. Use v2 or v3 instead.
+
+            Returns:
+                list: Tasks with v1 schema (name, done fields).
+
+            Deprecation:
+                This version is deprecated and will be removed on 2024-06-01.
+                Please migrate to v2 or v3.
+            """
             # Legacy format with deprecated field names
             return [
                 {'id': 1, 'name': 'Task One', 'done': False},
@@ -121,7 +245,16 @@ def create_app():
         @tasks_v1.expect(task_model_v1)
         @tasks_v1.marshal_with(task_model_v1, code=201)
         def post(self):
-            """Create a task (v1 format)"""
+            """Create a task in v1 format (DEPRECATED).
+
+            Note: v1 does not support priority field or timestamps.
+
+            Returns:
+                tuple: (Created task, 201 status code)
+
+            Deprecation:
+                This version is deprecated. Use v2 or v3 for full feature support.
+            """
             # Note: v1 doesn't support priority field
             return {'id': 3, 'name': api_v1.payload['name'], 'done': False}, 201
 
@@ -145,7 +278,24 @@ def create_app():
         @tasks_v2.marshal_list_with(task_model_v2)
         @tasks_v2.param('priority', 'Filter by priority', enum=['low', 'medium', 'high'])
         def get(self):
-            """List all tasks with filtering (v2 format)"""
+            """List all tasks with filtering in v2 format (CURRENT).
+
+            This is the current stable version with priority support and
+            improved field names.
+
+            Query Parameters:
+                priority (str, optional): Filter by priority (low, medium, high).
+
+            Returns:
+                list: Tasks with v2 schema (title, completed, priority, timestamps).
+
+            Changes from v1:
+                - Field "name" renamed to "title"
+                - Field "done" renamed to "completed"
+                - Added "priority" field
+                - Added "description" field
+                - Added "created_at" timestamp
+            """
             priority = request.args.get('priority')
             tasks = [
                 {
@@ -175,7 +325,16 @@ def create_app():
         @tasks_v2.expect(task_model_v2)
         @tasks_v2.marshal_with(task_model_v2, code=201)
         def post(self):
-            """Create a task with priority (v2 format)"""
+            """Create a task with priority in v2 format (CURRENT).
+
+            Returns:
+                tuple: (Created task with timestamps, 201 status code)
+
+            New Features in v2:
+                - Priority support (low, medium, high)
+                - Description field
+                - Automatic timestamp generation
+            """
             task = api_v2.payload
             task['id'] = 3
             task['created_at'] = datetime.utcnow()
@@ -188,7 +347,19 @@ def create_app():
         @tasks_v2.doc('get_task')
         @tasks_v2.marshal_with(task_model_v2)
         def get(self, task_id):
-            """Get task by ID (v2 feature)"""
+            """Get task by ID (v2 feature).
+
+            New endpoint in v2 - not available in v1.
+
+            Args:
+                task_id (int): The task identifier.
+
+            Returns:
+                dict: Task details with v2 schema.
+
+            Note:
+                In v3, task_id changes to UUID string format.
+            """
             return {
                 'id': task_id,
                 'title': f'Task {task_id}',
@@ -230,7 +401,27 @@ def create_app():
         @tasks_v3.param('status', 'Filter by status')
         @tasks_v3.param('assignee_id', 'Filter by assignee')
         def get(self):
-            """List tasks with advanced filtering (v3 format)"""
+            """List tasks with advanced filtering in v3 format (BETA).
+
+            Next generation API with breaking changes. Use for evaluation only.
+
+            Query Parameters:
+                status (str, optional): Filter by status (pending, in_progress,
+                    completed, cancelled).
+                assignee_id (int, optional): Filter by assignee ID.
+
+            Returns:
+                list: Tasks with v3 schema (UUID IDs, nested objects, metadata).
+
+            Breaking Changes from v2:
+                - Task ID is now UUID string (was integer)
+                - Priority is now integer 1-5 (was string low/medium/high)
+                - Status is enum (was boolean "completed")
+                - Added assignee as nested object
+                - Added tags array
+                - Added flexible metadata field
+                - Added updated_at timestamp
+            """
             return [
                 {
                     'id': 'uuid-123-456',
@@ -250,7 +441,18 @@ def create_app():
         @tasks_v3.expect(task_model_v3)
         @tasks_v3.marshal_with(task_model_v3, code=201)
         def post(self):
-            """Create task with full metadata (v3 format)"""
+            """Create task with full metadata in v3 format (BETA).
+
+            Returns:
+                tuple: (Created task with UUID and metadata, 201 status code)
+
+            New Features in v3:
+                - Automatic UUID generation
+                - Support for assignees
+                - Tag-based categorization
+                - Flexible metadata storage
+                - Both created_at and updated_at timestamps
+            """
             import uuid
             task = api_v3.payload
             task['id'] = str(uuid.uuid4())
@@ -263,7 +465,32 @@ def create_app():
     # Version information endpoint
     @app.route('/api/versions')
     def get_versions():
-        """Get API version information"""
+        """Get comprehensive API version information.
+
+        Returns:
+            dict: Complete version information including:
+                - current_version: Version being used in this request
+                - available_versions: All supported versions
+                - default_version: Default when not specified
+                - deprecated_versions: Versions marked for removal
+                - sunset_dates: Removal dates for deprecated versions
+                - documentation: Links to Swagger docs for each version
+                - migration_guide: Link to migration documentation
+
+        Example Response:
+            {
+                "current_version": "v2",
+                "available_versions": ["v1", "v2", "v3"],
+                "default_version": "v2",
+                "deprecated_versions": ["v1"],
+                "sunset_dates": {"v1": "2024-06-01"},
+                "documentation": {
+                    "v1": "/api/v1/swagger",
+                    "v2": "/api/v2/swagger",
+                    "v3": "/api/v3/swagger"
+                }
+            }
+        """
         return jsonify({
             'current_version': g.get('api_version'),
             'available_versions': app.config['API_VERSIONS'],
@@ -281,7 +508,33 @@ def create_app():
     # Version migration helper endpoint
     @app.route('/api/migrate')
     def migration_guide():
-        """Get migration guide between versions"""
+        """Get detailed migration guide between API versions.
+
+        Query Parameters:
+            from (str): Source version (default: 'v1')
+            to (str): Target version (default: 'v2')
+
+        Returns:
+            dict: Migration guide containing:
+                - from: Source version
+                - to: Target version
+                - guide: Migration details with:
+                    - breaking_changes: List of breaking changes
+                    - new_features: New capabilities in target version
+                    - deprecated: Features removed or changed
+
+        Example:
+            GET /api/migrate?from=v1&to=v2
+
+            Returns migration guide from v1 to v2 with all breaking changes,
+            new features, and deprecated items listed.
+
+        Implementation Notes:
+            - Helps developers plan migration
+            - Documents all breaking changes
+            - Provides feature comparison
+            - Returns 404 if migration path not documented
+        """
         from_version = request.args.get('from', 'v1')
         to_version = request.args.get('to', 'v2')
 
