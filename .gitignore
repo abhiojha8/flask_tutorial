@@ -247,3 +247,5 @@ media/
 
 # Redis dump
 dump.rdb
+
+add_python_to_path.ps1
