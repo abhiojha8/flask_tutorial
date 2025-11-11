@@ -249,3 +249,9 @@ media/
 dump.rdb
 
 add_python_to_path.ps1
+COMPLETION_PLAN.md
+COURSE_INTRODUCTION_GUIDE.md
+TEACHING_GUIDE_SUMMARY.md
+WHATS_NEW.md
+settings.local.json
+DEMO_BUILD*
