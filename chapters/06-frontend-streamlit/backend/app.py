@@ -103,6 +103,7 @@ class User(db.Model):
         return {
             'id': self.id,
             'username': self.username,
+            'name': self.username,  # Alias for frontend compatibility
             'email': self.email,
             'bio': self.bio,
             'article_count': len(self.articles),

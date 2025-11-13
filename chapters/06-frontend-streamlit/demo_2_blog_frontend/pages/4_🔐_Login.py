@@ -12,7 +12,7 @@ import re
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config import API_BASE_URL
-from utils.auth import init_session_state, is_authenticated, save_auth_data, logout
+from utils.auth import init_session_state, is_authenticated, save_auth_data, clear_auth_data
 from utils.api_client import BlogAPIClient, handle_api_error
 
 # ============================================================================
@@ -56,7 +56,7 @@ if is_authenticated():
     st.subheader("Logout")
 
     if st.button("🚪 Logout", type="primary"):
-        logout()
+        clear_auth_data()
         st.success("✅ Logged out successfully!")
         st.rerun()
 
@@ -115,7 +115,7 @@ with tab1:
                         response = api.login(login_email, login_password)
 
                     # Save auth data
-                    save_auth_data(response['access_token'], response['user'])
+                    save_auth_data(response['token'], response['user'])
 
                     st.success(f"✅ Welcome back, {response['user']['name']}!")
                     st.balloons()
@@ -136,16 +136,12 @@ with tab1:
         Try logging in with these demo accounts:
 
         **User 1:**
-        - Email: `john.doe@example.com`
-        - Password: `password123`
+        - Email: `john@example.com`
+        - Password: `Password123!`
 
         **User 2:**
-        - Email: `jane.smith@example.com`
-        - Password: `password123`
-
-        **User 3:**
-        - Email: `bob.johnson@example.com`
-        - Password: `password123`
+        - Email: `jane@example.com`
+        - Password: `Password123!`
         """)
 
 # ============================================================================
@@ -220,7 +216,7 @@ with tab2:
                         )
 
                     # Save auth data
-                    save_auth_data(response['access_token'], response['user'])
+                    save_auth_data(response['token'], response['user'])
 
                     st.success(f"✅ Account created successfully! Welcome, {response['user']['name']}!")
                     st.balloons()
